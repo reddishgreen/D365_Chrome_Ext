@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(node create-icons.js)",
-      "Bash(git init)"
+      "Bash(git init)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

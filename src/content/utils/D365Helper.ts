@@ -272,4 +272,14 @@ export class D365Helper {
     });
     this.overlayElements = [];
   }
+
+  // Get form libraries and event handlers
+  async getFormLibraries(): Promise<any> {
+    try {
+      return await this.sendRequest('GET_FORM_LIBRARIES');
+    } catch (error) {
+      console.error('Error getting form libraries:', error);
+      throw error;
+    }
+  }
 }
