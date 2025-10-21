@@ -3,7 +3,7 @@
   "name": "D365 Helper - Developer Toolkit",
   "short_name": "D365 Helper",
   "version": "1.0.0",
-  "description": "Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view schema names, edit Web API data, unlock fields, auto-fill forms & bypass plugins.",
+  "description": "Developer toolkit for D365: manage fields, view schemas, edit Web API data, unlock fields, auto-fill forms & bypass plugins.",
   "author": "D365 Developer Tools",
   "homepage_url": "https://github.com/yourusername/d365-helper",
   "permissions": [

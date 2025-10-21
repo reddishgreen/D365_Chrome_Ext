@@ -82,29 +82,30 @@ Use content from `STORE_LISTING.md`
 
 **Language**: English (United States)
 
-### Privacy
+### Privacy Practices Tab
+
+**IMPORTANT**: You must complete the Privacy practices tab before you can publish.
+
+**See `PRIVACY_PRACTICES_RESPONSES.md` for detailed responses to all required fields.**
+
+**Quick Summary**:
+
+1. **Single Purpose Description**: Developer productivity tools for Microsoft Dynamics 365
+2. **Permission Justifications**: Detailed justifications provided in PRIVACY_PRACTICES_RESPONSES.md for:
+   - activeTab
+   - clipboardWrite
+   - storage
+   - host permissions
+3. **Remote Code**: No
+4. **Data Handling**: No data collected, stored, or transmitted
+5. **Certifications**: Complete all required certifications in the dashboard
 
 **Privacy Policy**:
-Upload `PRIVACY_POLICY.md` or host it and provide URL
+Upload `PRIVACY_POLICY.md` or host it on GitHub and provide the URL
 
-**Single Purpose Description**:
-```
-This extension provides developer tools for working with Microsoft Dynamics 365 forms, including field management, schema viewing, and Web API data editing.
-```
-
-**Permission Justifications**:
-
-- **activeTab**: Required to interact with Dynamics 365 form pages and inject the developer toolbar
-- **clipboardWrite**: Used when users click copy buttons to copy schema names, record IDs, or Web API data
-- **storage**: Saves user preferences such as toolbar minimized/expanded state
-- **host permissions (*.dynamics.com)**: Required to run on Microsoft Dynamics 365 instances only
-
-**Remote Code**: No
-
-**Data Usage**:
-- This extension does NOT collect user data
-- This extension does NOT use or transfer data
-- All processing is local
+**Contact Email**:
+- Enter your contact email on the Account tab
+- Verify your email before publishing (check inbox for verification link)
 
 ### Store Listing
 
