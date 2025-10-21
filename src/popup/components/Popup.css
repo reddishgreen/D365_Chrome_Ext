@@ -1,0 +1,87 @@
+.popup {
+  width: 350px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.popup-header {
+  background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+  color: white;
+  padding: 20px;
+  text-align: center;
+}
+
+.popup-header h1 {
+  margin: 0 0 5px 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.version {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.popup-content {
+  padding: 20px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.info-section {
+  margin-bottom: 20px;
+}
+
+.info-section:last-child {
+  margin-bottom: 0;
+}
+
+.info-section h2 {
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  color: #0078d4;
+  border-bottom: 2px solid #0078d4;
+  padding-bottom: 5px;
+}
+
+.info-section p {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.feature-list li {
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.feature-list li:last-child {
+  border-bottom: none;
+}
+
+.feature-list strong {
+  color: #0078d4;
+  font-weight: 600;
+}
+
+.popup-footer {
+  background: #f5f5f5;
+  padding: 15px;
+  text-align: center;
+  border-top: 1px solid #e0e0e0;
+}
+
+.popup-footer p {
+  margin: 0;
+  font-size: 12px;
+  color: #666;
+}

@@ -1,0 +1,187 @@
+/* D365 Helper Toolbar Styles */
+#d365-helper-toolbar-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 999999;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.d365-toolbar {
+  background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 0;
+  margin: 0;
+  border-bottom: 2px solid #005a9e;
+}
+
+.d365-toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.d365-toolbar-title {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.d365-toolbar-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  align-items: center;
+}
+
+.d365-toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.d365-toolbar-section-label {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.9;
+  margin-right: 4px;
+}
+
+.d365-toolbar-btn {
+  background: white;
+  color: #0078d4;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.d365-toolbar-btn:hover {
+  background: #f0f0f0;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.d365-toolbar-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.d365-toolbar-btn-active {
+  background: #ffd200 !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+
+.d365-toolbar-minimize,
+.d365-toolbar-maximize {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 4px 10px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.d365-toolbar-minimize:hover,
+.d365-toolbar-maximize:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: none;
+}
+
+.d365-toolbar-minimized {
+  background: #0078d4;
+  padding: 4px 12px;
+  border-radius: 0 0 8px 8px;
+  width: fit-content;
+  margin: 0 auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.d365-toolbar-minimized .d365-toolbar-maximize {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.d365-toolbar-notification {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: #107c10;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 10000000;
+  animation: slideInRight 0.3s ease, fadeOut 0.3s ease 2.7s;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.d365-schema-overlay {
+  font-weight: 500 !important;
+  user-select: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.d365-schema-overlay:hover {
+  background: rgba(0, 90, 158, 1) !important;
+  transform: scale(1.05);
+}
+
+@media (max-width: 1200px) {
+  .d365-toolbar-content {
+    gap: 6px;
+    padding: 6px 10px;
+  }
+
+  .d365-toolbar-section {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+
+  .d365-toolbar-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  .d365-toolbar-section-label {
+    font-size: 11px;
+  }
+}

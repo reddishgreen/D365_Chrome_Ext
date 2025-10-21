@@ -1,0 +1,84 @@
+{
+  "manifest_version": 3,
+  "name": "D365 Helper - Developer Toolkit",
+  "short_name": "D365 Helper",
+  "version": "1.0.0",
+  "description": "Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view schema names, edit Web API data, unlock fields, auto-fill forms & bypass plugins.",
+  "author": "D365 Developer Tools",
+  "homepage_url": "https://github.com/yourusername/d365-helper",
+  "permissions": [
+    "activeTab",
+    "clipboardWrite",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.dynamics.com/*",
+    "https://*.crm.dynamics.com/*",
+    "https://*.crm2.dynamics.com/*",
+    "https://*.crm3.dynamics.com/*",
+    "https://*.crm4.dynamics.com/*",
+    "https://*.crm5.dynamics.com/*",
+    "https://*.crm6.dynamics.com/*",
+    "https://*.crm7.dynamics.com/*",
+    "https://*.crm8.dynamics.com/*",
+    "https://*.crm9.dynamics.com/*",
+    "https://*.crm10.dynamics.com/*",
+    "https://*.crm11.dynamics.com/*",
+    "https://*.crm12.dynamics.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.dynamics.com/*",
+        "https://*.crm.dynamics.com/*",
+        "https://*.crm2.dynamics.com/*",
+        "https://*.crm3.dynamics.com/*",
+        "https://*.crm4.dynamics.com/*",
+        "https://*.crm5.dynamics.com/*",
+        "https://*.crm6.dynamics.com/*",
+        "https://*.crm7.dynamics.com/*",
+        "https://*.crm8.dynamics.com/*",
+        "https://*.crm9.dynamics.com/*",
+        "https://*.crm10.dynamics.com/*",
+        "https://*.crm11.dynamics.com/*",
+        "https://*.crm12.dynamics.com/*"
+      ],
+      "js": ["content.bundle.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["webapi-viewer.html", "injected.bundle.js"],
+      "matches": [
+        "https://*.dynamics.com/*",
+        "https://*.crm.dynamics.com/*",
+        "https://*.crm2.dynamics.com/*",
+        "https://*.crm3.dynamics.com/*",
+        "https://*.crm4.dynamics.com/*",
+        "https://*.crm5.dynamics.com/*",
+        "https://*.crm6.dynamics.com/*",
+        "https://*.crm7.dynamics.com/*",
+        "https://*.crm8.dynamics.com/*",
+        "https://*.crm9.dynamics.com/*",
+        "https://*.crm10.dynamics.com/*",
+        "https://*.crm11.dynamics.com/*",
+        "https://*.crm12.dynamics.com/*"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

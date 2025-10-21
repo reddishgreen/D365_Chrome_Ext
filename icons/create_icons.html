@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head><title>Icon Generator</title></head>
+<body>
+<canvas id="canvas16" width="16" height="16"></canvas>
+<canvas id="canvas48" width="48" height="48"></canvas>
+<canvas id="canvas128" width="128" height="128"></canvas>
+<script>
+function drawIcon(canvas, size) {
+    const ctx = canvas.getContext('2d');
+    
+    // Background - Blue gradient
+    const gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, '#0078d4');
+    gradient.addColorStop(1, '#106ebe');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    
+    // Lightning bolt symbol
+    ctx.fillStyle = '#FFD200';
+    ctx.strokeStyle = '#FFD200';
+    ctx.lineWidth = size / 16;
+    
+    const scale = size / 16;
+    ctx.beginPath();
+    ctx.moveTo(9 * scale, 2 * scale);
+    ctx.lineTo(6 * scale, 8 * scale);
+    ctx.lineTo(8 * scale, 8 * scale);
+    ctx.lineTo(7 * scale, 14 * scale);
+    ctx.lineTo(10 * scale, 8 * scale);
+    ctx.lineTo(8 * scale, 8 * scale);
+    ctx.closePath();
+    ctx.fill();
+}
+
+drawIcon(document.getElementById('canvas16'), 16);
+drawIcon(document.getElementById('canvas48'), 48);
+drawIcon(document.getElementById('canvas128'), 128);
+
+// Download links
+setTimeout(() => {
+    ['16', '48', '128'].forEach(size => {
+        const canvas = document.getElementById('canvas' + size);
+        canvas.toBlob(blob => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'icon' + size + '.png';
+            a.click();
+        });
+    });
+}, 100);
+</script>
+</body>
+</html>
