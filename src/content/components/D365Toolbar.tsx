@@ -125,6 +125,16 @@ const D365Toolbar: React.FC = () => {
     }
   };
 
+  const handleOpenPluginTraceLogs = () => {
+    try {
+      const url = helper.getPluginTraceLogsUrl();
+      window.open(url, '_blank');
+      showNotification('Opening Plugin Trace Logs...');
+    } catch (error) {
+      showNotification('Error opening Plugin Trace Logs');
+    }
+  };
+
   const handleUnlockFields = async () => {
     try {
       const count = await helper.unlockFields();
@@ -274,6 +284,10 @@ const D365Toolbar: React.FC = () => {
           </button>
           <button
             className="d365-toolbar-btn"
+            onClick={handleOpenPluginTraceLogs}
+            title="View Plugin Trace Logs"
+          >
+            Trace Logs
             onClick={handleShowLibraries}
             title="View JavaScript libraries and event handlers"
           >

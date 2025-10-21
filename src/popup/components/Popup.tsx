@@ -34,6 +34,9 @@ const Popup: React.FC = () => {
             <li>
               <strong>Form Editor</strong> - Quick access to form editor
             </li>
+            <li>
+              <strong>Plugin Trace Logs</strong> - Open Plugin Trace Logs list in a new tab
+            </li>
           </ul>
         </section>
 
