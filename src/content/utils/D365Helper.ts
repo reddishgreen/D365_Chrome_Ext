@@ -113,6 +113,12 @@ export class D365Helper {
     }
   }
 
+  // Get Plugin Trace Logs URL
+  getPluginTraceLogsUrl(): string {
+    const orgUrl = this.getOrgUrl();
+    return `${orgUrl}/main.aspx?forceUCI=1&pagetype=entitylist&etn=plugintypetracelog`;
+  }
+
   // Toggle all fields visibility
   async toggleAllFields(show: boolean): Promise<void> {
     try {
