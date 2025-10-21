@@ -1,20 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { D365Helper } from '../utils/D365Helper';
+import { restoreShellContainerLayout, setShellContainerOffset } from '../utils/shellLayout';
+import FormLibrariesAnalyzer from './FormLibrariesAnalyzer';
 
 const D365Toolbar: React.FC = () => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [showSchemaNames, setShowSchemaNames] = useState(false);
   const [notification, setNotification] = useState<string>('');
+  const [showLibraries, setShowLibraries] = useState(false);
+  const [librariesData, setLibrariesData] = useState<any>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
 
   const helper = new D365Helper();
 
-  // Adjust shell-container margin when minimized state changes
-  useEffect(() => {
-    const shellContainer = document.getElementById('shell-container');
-    if (shellContainer) {
-      shellContainer.style.marginTop = isMinimized ? '35px' : '70px';
-    }
+  const updateShellOffset = useCallback(() => {
+    const toolbarHeight = toolbarRef.current?.getBoundingClientRect().height;
+    const fallbackHeight = isMinimized ? 35 : 70;
+    setShellContainerOffset(Math.round(toolbarHeight ?? fallbackHeight));
   }, [isMinimized]);
+
+  useEffect(() => {
+    updateShellOffset();
+  }, [updateShellOffset]);
+
+  useEffect(() => {
+    const handleResize = () => updateShellOffset();
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [updateShellOffset]);
+
+  useEffect(() => {
+    return () => {
+      restoreShellContainerLayout();
+    };
+  }, []);
 
   const showNotification = (message: string) => {
     setNotification(message);
@@ -130,9 +153,26 @@ const D365Toolbar: React.FC = () => {
     }
   };
 
+  const handleShowLibraries = async () => {
+    try {
+      showNotification('Loading JavaScript libraries...');
+      const data = await helper.getFormLibraries();
+      setLibrariesData(data);
+      setShowLibraries(true);
+      showNotification('');
+    } catch (error) {
+      showNotification('Error loading libraries');
+    }
+  };
+
+  const handleCloseLibraries = () => {
+    setShowLibraries(false);
+    setLibrariesData(null);
+  };
+
   if (isMinimized) {
     return (
-      <div className="d365-toolbar d365-toolbar-minimized">
+      <div ref={toolbarRef} className="d365-toolbar d365-toolbar-minimized">
         <button
           className="d365-toolbar-btn d365-toolbar-maximize"
           onClick={() => setIsMinimized(false)}
@@ -145,7 +185,7 @@ const D365Toolbar: React.FC = () => {
   }
 
   return (
-    <div className="d365-toolbar">
+    <div ref={toolbarRef} className="d365-toolbar">
       <div className="d365-toolbar-content">
         <div className="d365-toolbar-section">
           <span className="d365-toolbar-section-label">Fields:</span>
@@ -248,6 +288,10 @@ const D365Toolbar: React.FC = () => {
             title="View Plugin Trace Logs"
           >
             Trace Logs
+            onClick={handleShowLibraries}
+            title="View JavaScript libraries and event handlers"
+          >
+            JS Libraries
           </button>
         </div>
       </div>
@@ -256,6 +300,13 @@ const D365Toolbar: React.FC = () => {
         <div className="d365-toolbar-notification">
           {notification}
         </div>
+      )}
+
+      {showLibraries && (
+        <FormLibrariesAnalyzer
+          data={librariesData}
+          onClose={handleCloseLibraries}
+        />
       )}
     </div>
   );

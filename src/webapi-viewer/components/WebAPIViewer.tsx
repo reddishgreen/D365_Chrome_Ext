@@ -1,9 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './WebAPIViewer.css';
+import LookupFieldEditor from './LookupFieldEditor';
+import { LookupEntityMetadata, LookupSelection } from './lookupTypes';
 
 interface ApiData {
   [key: string]: any;
 }
+
+interface ApiPathInfo {
+  baseUrl: string;
+  entitySetName: string;
+}
+
+const deriveAttributeName = (lookupKey: string): string => {
+  if (lookupKey.startsWith('_') && lookupKey.endsWith('_value')) {
+    return lookupKey.slice(1, -6);
+  }
+  return lookupKey;
+};
+
+const escapeODataIdentifier = (value: string): string => value.replace(/'/g, "''");
 
 const WebAPIViewer: React.FC = () => {
   const [apiUrl, setApiUrl] = useState<string>('');
@@ -16,6 +32,40 @@ const WebAPIViewer: React.FC = () => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['root']));
   const [editMode, setEditMode] = useState<boolean>(false);
   const [bypassPlugins, setBypassPlugins] = useState<boolean>(false);
+  const [entityLogicalName, setEntityLogicalName] = useState<string | null>(null);
+
+  const entityMetadataCache = useRef<Map<string, LookupEntityMetadata>>(new Map());
+  const entitySetToLogicalCache = useRef<Map<string, string>>(new Map());
+  const lookupTargetsCache = useRef<Map<string, string[]>>(new Map());
+
+  const apiPathInfo = useMemo<ApiPathInfo>(() => {
+    if (!apiUrl) {
+      return { baseUrl: '', entitySetName: '' };
+    }
+
+    const baseMatch = apiUrl.match(/^(https?:\/\/[^/]+\/api\/data\/v[0-9.]+\/)/i);
+    const baseUrl = baseMatch ? baseMatch[1] : '';
+    let entitySetName = '';
+
+    if (baseUrl && apiUrl.length > baseUrl.length) {
+      const remainder = apiUrl.substring(baseUrl.length);
+      const entityMatch = remainder.match(/^([^/?(]+)\(/);
+      if (entityMatch) {
+        entitySetName = entityMatch[1];
+      }
+    }
+
+    return { baseUrl, entitySetName };
+  }, [apiUrl]);
+
+  const apiBaseUrl = apiPathInfo.baseUrl;
+  const currentEntitySetName = apiPathInfo.entitySetName;
+
+  useEffect(() => {
+    entityMetadataCache.current.clear();
+    lookupTargetsCache.current.clear();
+    entitySetToLogicalCache.current.clear();
+  }, [apiBaseUrl]);
 
   useEffect(() => {
     // Get URL from query parameter
@@ -55,6 +105,181 @@ const WebAPIViewer: React.FC = () => {
     }
   };
 
+  const getEntityMetadata = useCallback(
+    async (logicalName: string): Promise<LookupEntityMetadata | null> => {
+      if (!logicalName || !apiBaseUrl) {
+        return null;
+      }
+
+      const cacheKey = logicalName.toLowerCase();
+      const cached = entityMetadataCache.current.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      const metadataUrl = `${apiBaseUrl}EntityDefinitions(LogicalName='${escapeODataIdentifier(
+        logicalName
+      )}')?$select=EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute`;
+
+      const response = await fetch(metadataUrl, {
+        headers: {
+          Accept: 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Metadata request failed (${response.status}): ${errorText}`);
+      }
+
+      const json = await response.json();
+      const metadata: LookupEntityMetadata = {
+        logicalName,
+        entitySetName: json?.EntitySetName,
+        primaryIdAttribute: json?.PrimaryIdAttribute,
+        primaryNameAttribute: json?.PrimaryNameAttribute ?? null,
+      };
+
+      if (!metadata.entitySetName || !metadata.primaryIdAttribute) {
+        throw new Error(`Metadata incomplete for entity ${logicalName}`);
+      }
+
+      entityMetadataCache.current.set(cacheKey, metadata);
+      return metadata;
+    },
+    [apiBaseUrl]
+  );
+
+  const getEntityLogicalName = useCallback(
+    async (entitySetName: string): Promise<string | null> => {
+      if (!entitySetName || !apiBaseUrl) {
+        return null;
+      }
+
+      const cacheKey = entitySetName.toLowerCase();
+      const cached = entitySetToLogicalCache.current.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      const logicalUrl = `${apiBaseUrl}EntityDefinitions?$select=LogicalName&$filter=EntitySetName eq '${escapeODataIdentifier(
+        entitySetName
+      )}'`;
+
+      const response = await fetch(logicalUrl, {
+        headers: {
+          Accept: 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to resolve logical name (${response.status}): ${errorText}`);
+      }
+
+      const json = await response.json();
+      const logicalName =
+        Array.isArray(json?.value) && json.value.length > 0
+          ? json.value[0]?.LogicalName ?? null
+          : null;
+
+      if (logicalName) {
+        entitySetToLogicalCache.current.set(cacheKey, logicalName);
+      }
+
+      return logicalName;
+    },
+    [apiBaseUrl]
+  );
+
+  const getLookupTargets = useCallback(
+    async (entityLogical: string, attributeName: string): Promise<string[]> => {
+      if (!entityLogical || !attributeName || !apiBaseUrl) {
+        return [];
+      }
+
+      const cacheKey = `${entityLogical}.${attributeName}`.toLowerCase();
+      const cached = lookupTargetsCache.current.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      const attributeUrl = `${apiBaseUrl}EntityDefinitions(LogicalName='${escapeODataIdentifier(
+        entityLogical
+      )}')/Attributes(LogicalName='${escapeODataIdentifier(
+        attributeName
+      )}')/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=Targets`;
+
+      const response = await fetch(attributeUrl, {
+        headers: {
+          Accept: 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to load lookup targets (${response.status}): ${errorText}`);
+      }
+
+      const json = await response.json();
+      let targets: string[] = [];
+
+      if (Array.isArray(json?.Targets)) {
+        targets = json.Targets.filter((item: unknown): item is string => typeof item === 'string');
+      } else if (Array.isArray(json?.value)) {
+        json.value.forEach((item: any) => {
+          if (Array.isArray(item?.Targets)) {
+            targets.push(
+              ...item.Targets.filter((target: unknown): target is string => typeof target === 'string')
+            );
+          }
+        });
+      }
+
+      lookupTargetsCache.current.set(cacheKey, targets);
+      return targets;
+    },
+    [apiBaseUrl]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveEntityName = async () => {
+      if (!currentEntitySetName) {
+        setEntityLogicalName(null);
+        return;
+      }
+
+      try {
+        const logical = await getEntityLogicalName(currentEntitySetName);
+        if (!cancelled) {
+          setEntityLogicalName(logical);
+        }
+      } catch (err) {
+        console.error('Failed to resolve entity logical name', err);
+        if (!cancelled) {
+          setEntityLogicalName(null);
+        }
+      }
+    };
+
+    resolveEntityName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentEntitySetName, getEntityLogicalName]);
+
   const handleRefresh = () => {
     if (apiUrl) {
       fetchData(apiUrl);
@@ -73,6 +298,35 @@ const WebAPIViewer: React.FC = () => {
     alert('API URL copied to clipboard!');
   };
 
+  const handleLookupSelection = useCallback(
+    (lookupKey: string, selection: LookupSelection | null) => {
+      setEditedData((previous) => {
+        const base = previous ?? (data ? { ...data } : {});
+        const updated: ApiData = { ...base };
+
+        const attributeName = deriveAttributeName(lookupKey);
+        const formattedKey = `${lookupKey}@OData.Community.Display.V1.FormattedValue`;
+        const logicalKey = `${lookupKey}@Microsoft.Dynamics.CRM.lookuplogicalname`;
+        const bindKey = `${attributeName}@odata.bind`;
+
+        if (selection) {
+          updated[lookupKey] = selection.recordId;
+          updated[formattedKey] = selection.displayName;
+          updated[logicalKey] = selection.logicalName;
+          updated[bindKey] = `/${selection.entitySetName}(${selection.recordId})`;
+        } else {
+          updated[lookupKey] = null;
+          updated[bindKey] = null;
+          delete updated[formattedKey];
+          delete updated[logicalKey];
+        }
+
+        return updated;
+      });
+    },
+    [data]
+  );
+
   const handleSaveChanges = async () => {
     if (!editedData || !apiUrl) return;
 
@@ -84,11 +338,19 @@ const WebAPIViewer: React.FC = () => {
       const updatePayload: any = {};
 
       for (const key in editedData) {
-        // Skip metadata fields and navigation properties
-        if (!key.startsWith('@') &&
-            !key.startsWith('_') &&
-            key !== 'odata.etag' &&
-            editedData[key] !== data?.[key]) {
+        if (key.endsWith('@odata.bind')) {
+          if (editedData[key] !== data?.[key]) {
+            updatePayload[key] = editedData[key];
+          }
+          continue;
+        }
+
+        if (
+          !key.startsWith('@') &&
+          !key.startsWith('_') &&
+          key !== 'odata.etag' &&
+          editedData[key] !== data?.[key]
+        ) {
           updatePayload[key] = editedData[key];
         }
       }
@@ -133,21 +395,24 @@ const WebAPIViewer: React.FC = () => {
 
   const handleEditModeToggle = () => {
     if (!editMode) {
-      // Entering edit mode - copy current data
-      setEditedData(JSON.parse(JSON.stringify(data)));
+      setEditedData(data ? JSON.parse(JSON.stringify(data)) : null);
     } else {
-      // Exiting edit mode - discard changes
       setEditedData(null);
     }
-    setEditMode(!editMode);
+    setEditMode((previous) => !previous);
   };
 
   const handleValueChange = (key: string, newValue: any) => {
-    if (!editedData) return;
+    if (!editMode) {
+      return;
+    }
 
-    setEditedData({
-      ...editedData,
-      [key]: newValue
+    setEditedData((previous) => {
+      const base = previous ?? (data ? { ...data } : {});
+      return {
+        ...base,
+        [key]: newValue,
+      };
     });
   };
 
@@ -176,10 +441,83 @@ const WebAPIViewer: React.FC = () => {
   };
 
   const renderValue = (value: any, key: string, level: number = 0, parentKey?: string): JSX.Element => {
-    // Allow lookup fields (_fieldname_value) to be editable, but not other metadata fields
     const isLookupField = key.startsWith('_') && key.endsWith('_value');
-    const isEditable = editMode && level === 0 && !key.startsWith('@') && (isLookupField || !key.startsWith('_'));
+    const isEditable =
+      editMode && level === 0 && !key.startsWith('@') && (isLookupField || !key.startsWith('_'));
     const currentValue = editMode && editedData ? editedData[key] : value;
+
+    if (isLookupField) {
+      const formattedKey = `${key}@OData.Community.Display.V1.FormattedValue`;
+      const logicalKey = `${key}@Microsoft.Dynamics.CRM.lookuplogicalname`;
+      const formattedValue =
+        (editMode && editedData ? editedData[formattedKey] : undefined) ?? data?.[formattedKey];
+      const lookupLogicalName =
+        (editMode && editedData ? editedData[logicalKey] : undefined) ?? data?.[logicalKey];
+      const attributeName = deriveAttributeName(key);
+      const currentGuid =
+        typeof currentValue === 'string' && currentValue ? currentValue : null;
+
+      if (isEditable && apiBaseUrl) {
+        const loadTargets =
+          entityLogicalName && attributeName
+            ? () => getLookupTargets(entityLogicalName, attributeName)
+            : undefined;
+
+        return (
+          <>
+            <LookupFieldEditor
+              apiBaseUrl={apiBaseUrl}
+              attributeName={attributeName}
+              currentId={currentGuid}
+              currentName={formattedValue ?? undefined}
+              currentLogicalName={lookupLogicalName ?? undefined}
+              loadTargets={loadTargets}
+              getEntityMetadata={getEntityMetadata}
+              onSelectionChange={(selection) => handleLookupSelection(key, selection)}
+            />
+            <button
+              className="copy-btn"
+              onClick={() => handleCopyValue(currentGuid)}
+              title="Copy lookup GUID"
+            >
+              ??
+            </button>
+          </>
+        );
+      }
+
+      if (!formattedValue && !currentGuid) {
+        return (
+          <>
+            <span className="value-null">null</span>
+            <button className="copy-btn" onClick={() => handleCopyValue(null)} title="Copy value">
+              ??
+            </button>
+          </>
+        );
+      }
+
+      const displayParts: string[] = [];
+      if (formattedValue) {
+        displayParts.push(String(formattedValue));
+      }
+      if (currentGuid) {
+        displayParts.push(`(${currentGuid.toUpperCase()})`);
+      }
+
+      return (
+        <>
+          <span className="value-lookup">{displayParts.join(' ')}</span>
+          <button
+            className="copy-btn"
+            onClick={() => handleCopyValue(currentGuid)}
+            title="Copy lookup GUID"
+          >
+            ??
+          </button>
+        </>
+      );
+    }
 
     if (value === null || typeof value === 'undefined') {
       return (
@@ -195,7 +533,9 @@ const WebAPIViewer: React.FC = () => {
           ) : (
             <span className="value-null">null</span>
           )}
-          <button className="copy-btn" onClick={() => handleCopyValue(null)} title="Copy value">📋</button>
+          <button className="copy-btn" onClick={() => handleCopyValue(null)} title="Copy value">
+            ??
+          </button>
         </>
       );
     }
@@ -215,7 +555,9 @@ const WebAPIViewer: React.FC = () => {
           ) : (
             <span className="value-boolean">{currentValue.toString()}</span>
           )}
-          <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">📋</button>
+          <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
+            ??
+          </button>
         </>
       );
     }
@@ -233,16 +575,14 @@ const WebAPIViewer: React.FC = () => {
           ) : (
             <span className="value-number">{currentValue}</span>
           )}
-          <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">📋</button>
+          <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
+            ??
+          </button>
         </>
       );
     }
 
     if (typeof currentValue === 'string') {
-      // Check if it's a lookup field (navigation property)
-      const isLookup = key.startsWith('_') && key.endsWith('_value');
-
-      // Check if it's a date
       if (currentValue.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
         return (
           <>
@@ -258,7 +598,9 @@ const WebAPIViewer: React.FC = () => {
                 "{currentValue}" <span className="value-hint">({new Date(currentValue).toLocaleString()})</span>
               </span>
             )}
-            <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">📋</button>
+            <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
+              ??
+            </button>
           </>
         );
       }
@@ -266,27 +608,18 @@ const WebAPIViewer: React.FC = () => {
       return (
         <>
           {isEditable ? (
-            isLookup ? (
-              <input
-                type="text"
-                className="edit-input edit-lookup"
-                value={currentValue}
-                onChange={(e) => handleValueChange(key, e.target.value)}
-                placeholder="Lookup GUID"
-                title="Enter lookup GUID value"
-              />
-            ) : (
-              <input
-                type="text"
-                className="edit-input"
-                value={currentValue}
-                onChange={(e) => handleValueChange(key, e.target.value)}
-              />
-            )
+            <input
+              type="text"
+              className="edit-input"
+              value={currentValue}
+              onChange={(e) => handleValueChange(key, e.target.value)}
+            />
           ) : (
             <span className="value-string">"{currentValue}"</span>
           )}
-          <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">📋</button>
+          <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
+            ??
+          </button>
         </>
       );
     }
@@ -298,7 +631,7 @@ const WebAPIViewer: React.FC = () => {
       return (
         <div className="value-array">
           <span className="toggle" onClick={() => toggleSection(sectionKey)}>
-            {isExpanded ? '▼' : '▶'} Array[{value.length}]
+            {isExpanded ? '' : '?'} Array[{value.length}]
           </span>
           {isExpanded && (
             <div className="nested-content">
@@ -322,7 +655,7 @@ const WebAPIViewer: React.FC = () => {
       return (
         <div className="value-object">
           <span className="toggle" onClick={() => toggleSection(sectionKey)}>
-            {isExpanded ? '▼' : '▶'} Object ({keys.length} properties)
+            {isExpanded ? '' : '?'} Object ({keys.length} properties)
           </span>
           {isExpanded && (
             <div className="nested-content">
@@ -341,7 +674,8 @@ const WebAPIViewer: React.FC = () => {
     return <span>{String(value)}</span>;
   };
 
-  const filterData = (obj: any, term: string): any => {
+
+const filterData = (obj: any, term: string): any => {
     if (!term) return obj;
 
     const lowerTerm = term.toLowerCase();
