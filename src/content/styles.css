@@ -43,6 +43,22 @@
   align-items: center;
 }
 
+.d365-toolbar-logo-section {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  margin-right: 12px;
+}
+
+.d365-toolbar-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
 .d365-toolbar-section {
   display: flex;
   align-items: center;
@@ -452,6 +468,9 @@
   font-size: 14px;
   transition: all 0.2s ease;
   min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .d365-libraries-copy-btn:hover {
@@ -525,5 +544,710 @@
   .d365-libraries-tab {
     padding: 10px 12px;
     font-size: 12px;
+  }
+}
+
+.d365-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 100000000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+}
+
+.d365-dialog-modal {
+  background: white;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 960px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.d365-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 28px;
+  border-bottom: 2px solid #005a9e;
+  background: linear-gradient(135deg, #005a9e 0%, #0078d4 100%);
+  color: white;
+}
+
+.d365-dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.d365-dialog-close {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: white;
+  font-size: 22px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.d365-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
+}
+
+.d365-dialog-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background: #f9f9f9;
+  border-radius: 0 0 8px 8px;
+}
+
+.d365-dialog-error {
+  background: rgba(245, 130, 32, 0.08);
+  border: 1px solid rgba(245, 130, 32, 0.35);
+  padding: 20px;
+  border-radius: 6px;
+  color: #7a2f10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.d365-dialog-error-icon {
+  font-size: 20px;
+}
+
+.d365-dialog-error-message {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.d365-dialog-error-hint {
+  font-size: 12px;
+  color: #9a4c1a;
+}
+
+.d365-trace-modal {
+  max-width: none;
+  width: 95%;
+  max-height: 95vh;
+}
+
+.d365-trace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.d365-trace-header-left {
+  display: flex;
+  align-items: center;
+}
+
+.d365-trace-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.d365-trace-logo {
+  width: 28px;
+  height: 28px;
+  color: white;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+}
+
+.d365-trace-logo:hover {
+  opacity: 1;
+}
+
+.d365-trace-refresh {
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.d365-trace-refresh:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(45deg);
+}
+
+.d365-trace-tabs {
+  display: flex;
+  background: white;
+  border-bottom: 1px solid #ddd;
+}
+
+.d365-trace-tab {
+  flex: 1;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.d365-trace-tab:hover {
+  background: rgba(0, 120, 212, 0.08);
+  color: #005a9e;
+}
+
+.d365-trace-tab-active {
+  background: #f5f5f5;
+  color: #005a9e;
+  font-weight: 600;
+  border-bottom: 3px solid #005a9e;
+}
+
+.d365-trace-content {
+  background: #f5f6fa;
+}
+
+.d365-trace-content-split {
+  display: flex;
+  height: calc(95vh - 180px);
+  min-height: 500px;
+  background: #f5f6fa;
+  border-radius: 0 0 8px 8px;
+}
+
+.d365-trace-list-panel {
+  width: 400px;
+  min-width: 350px;
+  max-width: 500px;
+  overflow-y: auto;
+  border-right: 1px solid #ddd;
+  background: #fafafa;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.d365-trace-list-item {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.d365-trace-list-item:hover {
+  border-color: #0078d4;
+  box-shadow: 0 2px 8px rgba(0, 120, 212, 0.15);
+}
+
+.d365-trace-list-item-selected {
+  background: #e6f2ff;
+  border-color: #0078d4;
+  border-width: 2px;
+  padding: 9px 11px;
+}
+
+.d365-trace-list-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.d365-trace-list-item-message {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d3c72;
+  line-height: 1.5;
+}
+
+.d365-trace-list-item-error {
+  color: #c00000;
+  font-size: 16px;
+}
+
+.d365-trace-list-item-entity {
+  background: rgba(0, 101, 189, 0.1);
+  color: #005a9e;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.d365-trace-list-item-time {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.d365-trace-details-panel-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  background: #f9f9f9;
+}
+
+.d365-trace-details-panel {
+  padding: 20px 24px;
+}
+
+.d365-trace-details-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+  font-size: 14px;
+  font-style: italic;
+}
+
+.d365-trace-details-header {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #e0e0e0;
+}
+
+.d365-trace-details-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.d365-trace-message-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d3c72;
+}
+
+.d365-trace-entity-badge {
+  background: rgba(0, 101, 189, 0.1);
+  color: #005a9e;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.d365-trace-error-badge {
+  background: rgba(200, 0, 0, 0.15);
+  color: #c00000;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.d365-trace-details-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: #666;
+  align-items: center;
+}
+
+.d365-trace-details-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.d365-trace-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.d365-trace-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.d365-trace-detail-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #7a7a7a;
+}
+
+.d365-trace-detail-value {
+  font-size: 13px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.d365-trace-copy-btn {
+  border: 1px solid #d0d0d0;
+  background: transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.d365-trace-copy-btn:hover {
+  border-color: #0078d4;
+  color: #0078d4;
+  background: rgba(0, 120, 212, 0.08);
+}
+
+.d365-copy-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.d365-copy-success {
+  color: #107c10;
+  font-weight: 600;
+}
+
+.d365-trace-section {
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.d365-trace-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.d365-trace-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.d365-trace-pre {
+  margin: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #f5f5f5;
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #2b3a55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.d365-trace-pre-error {
+  background: rgba(200, 0, 0, 0.08);
+  border: 1px solid rgba(200, 0, 0, 0.2);
+  color: #800000;
+}
+
+.d365-trace-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 14px;
+  background: white;
+  border-radius: 8px;
+  border: 1px dashed #d0d0d0;
+  margin: 20px;
+}
+
+.d365-trace-more-records {
+  margin-top: 18px;
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .d365-dialog-modal {
+    max-width: 95%;
+    max-height: 92vh;
+  }
+
+  .d365-dialog-header {
+    padding: 16px 20px;
+  }
+
+  .d365-dialog-content {
+    padding: 18px;
+  }
+
+  .d365-trace-modal {
+    max-width: 96%;
+  }
+
+  .d365-trace-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .d365-trace-content-split {
+    flex-direction: column;
+    height: 600px;
+  }
+
+  .d365-trace-list-panel {
+    width: 100%;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .d365-trace-details-panel-wrapper {
+    flex: 1;
+  }
+}
+
+.d365-options-modal {
+  max-width: 920px;
+}
+
+.d365-options-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.d365-options-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.d365-options-count {
+  font-size: 12px;
+  color: #666;
+}
+
+.d365-options-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.d365-options-search-input {
+  width: 240px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #c8c8c8;
+  font-size: 13px;
+}
+
+.d365-options-search-input:focus {
+  outline: none;
+  border-color: #0078d4;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.15);
+}
+
+.d365-options-search-clear {
+  border: none;
+  background: transparent;
+  color: #0078d4;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.d365-options-content {
+  background: #f7f7fb;
+}
+
+.d365-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.d365-options-attribute {
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  overflow: hidden;
+}
+
+.d365-options-attribute-header {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+}
+
+.d365-options-attribute-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.d365-options-attribute-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d3c72;
+}
+
+.d365-options-attribute-logical {
+  font-size: 12px;
+  color: #777;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.d365-options-attribute-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #555;
+}
+
+.d365-options-attribute-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.d365-options-copy-btn {
+  border: 1px solid #d0d0d0;
+  background: transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.d365-options-copy-btn:hover {
+  border-color: #0078d4;
+  color: #0078d4;
+  background: rgba(0, 120, 212, 0.08);
+}
+
+.d365-options-table {
+  border-top: 1px solid #e7e7e7;
+}
+
+.d365-options-table-head,
+.d365-options-table-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 80px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 18px;
+}
+
+.d365-options-table-head {
+  background: #f2f4f7;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+
+.d365-options-table-row {
+  background: white;
+  border-top: 1px solid #f0f0f0;
+}
+
+.d365-options-table-row-default {
+  background: rgba(0, 120, 212, 0.065);
+}
+
+.d365-options-option-value {
+  font-size: 13px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #1b2a4f;
+}
+
+.d365-options-option-label {
+  font-size: 13px;
+  color: #222;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.d365-options-color-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.d365-options-empty {
+  text-align: center;
+  padding: 50px 20px;
+  color: #666;
+  font-size: 14px;
+  background: white;
+  border-radius: 8px;
+  border: 1px dashed #d0d0d0;
+}
+
+@media (max-width: 780px) {
+  .d365-options-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .d365-options-search {
+    width: 100%;
+  }
+
+  .d365-options-search-input {
+    flex: 1;
+    width: 100%;
+  }
+
+  .d365-options-table-head,
+  .d365-options-table-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .d365-options-table-row button {
+    justify-self: flex-start;
   }
 }

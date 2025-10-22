@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { D365Helper } from '../utils/D365Helper';
 import { restoreShellContainerLayout, setShellContainerOffset } from '../utils/shellLayout';
 import FormLibrariesAnalyzer from './FormLibrariesAnalyzer';
+import PluginTraceLogViewer, { PluginTraceLogData } from './PluginTraceLogViewer';
+import OptionSetsViewer, { OptionSetsData } from './OptionSetsViewer';
 
 const D365Toolbar: React.FC = () => {
   const [isMinimized, setIsMinimized] = useState(false);
@@ -9,6 +11,10 @@ const D365Toolbar: React.FC = () => {
   const [notification, setNotification] = useState<string>('');
   const [showLibraries, setShowLibraries] = useState(false);
   const [librariesData, setLibrariesData] = useState<any>(null);
+  const [showTraceLogs, setShowTraceLogs] = useState(false);
+  const [traceLogData, setTraceLogData] = useState<PluginTraceLogData | null>(null);
+  const [showOptionSets, setShowOptionSets] = useState(false);
+  const [optionSetData, setOptionSetData] = useState<OptionSetsData | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
 
   const helper = new D365Helper();
@@ -125,14 +131,70 @@ const D365Toolbar: React.FC = () => {
     }
   };
 
-  const handleOpenPluginTraceLogs = () => {
+  const loadPluginTraceLogs = async (openModal: boolean = false) => {
     try {
-      const url = helper.getPluginTraceLogsUrl();
-      window.open(url, '_blank');
-      showNotification('Opening Plugin Trace Logs...');
-    } catch (error) {
-      showNotification('Error opening Plugin Trace Logs');
+      showNotification('Loading plugin trace logs...');
+      const data = await helper.getPluginTraceLogs();
+      setTraceLogData(data);
+      if (openModal) {
+        setShowTraceLogs(true);
+      }
+      showNotification('');
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Error loading plugin trace logs';
+      setTraceLogData({
+        logs: [],
+        error: message
+      });
+      setShowTraceLogs(true);
+      showNotification('Error loading plugin trace logs');
     }
+  };
+
+  const handleShowTraceLogs = async () => {
+    await loadPluginTraceLogs(true);
+  };
+
+  const handleRefreshTraceLogs = async () => {
+    await loadPluginTraceLogs(false);
+  };
+
+  const handleCloseTraceLogs = () => {
+    setShowTraceLogs(false);
+    setTraceLogData(null);
+  };
+
+  const loadOptionSets = async (openModal: boolean = false) => {
+    try {
+      showNotification('Loading option sets...');
+      const data = await helper.getOptionSets();
+      setOptionSetData(data);
+      if (openModal) {
+        setShowOptionSets(true);
+      }
+      showNotification('');
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Error loading option sets';
+      setOptionSetData({
+        attributes: [],
+        error: message
+      });
+      setShowOptionSets(true);
+      showNotification('Error loading option sets');
+    }
+  };
+
+  const handleShowOptionSets = async () => {
+    await loadOptionSets(true);
+  };
+
+  const handleRefreshOptionSets = async () => {
+    await loadOptionSets(false);
+  };
+
+  const handleCloseOptionSets = () => {
+    setShowOptionSets(false);
+    setOptionSetData(null);
   };
 
   const handleUnlockFields = async () => {
@@ -150,6 +212,19 @@ const D365Toolbar: React.FC = () => {
       showNotification(`Auto-filled ${count} fields!`);
     } catch (error) {
       showNotification('Error auto-filling form');
+    }
+  };
+
+  const handleEnableGodMode = async () => {
+    try {
+      showNotification('Activating God Mode...');
+      await helper.toggleAllFields(true);
+      await helper.toggleAllSections(true);
+      const unlocked = await helper.unlockFields();
+      const disabled = await helper.disableFieldRequirements();
+      showNotification(`God Mode enabled: unlocked ${unlocked} and removed requirements from ${disabled}.`);
+    } catch (error) {
+      showNotification('Error enabling God Mode');
     }
   };
 
@@ -187,6 +262,17 @@ const D365Toolbar: React.FC = () => {
   return (
     <div ref={toolbarRef} className="d365-toolbar">
       <div className="d365-toolbar-content">
+        <div className="d365-toolbar-logo-section">
+          <img
+            className="d365-toolbar-logo"
+            src={chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg')}
+            alt="RG Logo"
+            onError={(e) => {
+              console.error('Logo failed to load:', chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg'));
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
         <div className="d365-toolbar-section">
           <span className="d365-toolbar-section-label">Fields:</span>
           <button
@@ -257,6 +343,13 @@ const D365Toolbar: React.FC = () => {
           >
             Auto Fill
           </button>
+          <button
+            className="d365-toolbar-btn"
+            onClick={handleEnableGodMode}
+            title="Reveal hidden fields, unlock read-only controls, and remove required flags"
+          >
+            God Mode
+          </button>
         </div>
 
         <div className="d365-toolbar-section">
@@ -284,14 +377,24 @@ const D365Toolbar: React.FC = () => {
           </button>
           <button
             className="d365-toolbar-btn"
-            onClick={handleOpenPluginTraceLogs}
+            onClick={handleShowTraceLogs}
             title="View Plugin Trace Logs"
           >
             Trace Logs
+          </button>
+          <button
+            className="d365-toolbar-btn"
             onClick={handleShowLibraries}
             title="View JavaScript libraries and event handlers"
           >
             JS Libraries
+          </button>
+          <button
+            className="d365-toolbar-btn"
+            onClick={handleShowOptionSets}
+            title="View option set values used on this form"
+          >
+            Option Sets
           </button>
         </div>
       </div>
@@ -306,6 +409,22 @@ const D365Toolbar: React.FC = () => {
         <FormLibrariesAnalyzer
           data={librariesData}
           onClose={handleCloseLibraries}
+        />
+      )}
+
+      {showTraceLogs && (
+        <PluginTraceLogViewer
+          data={traceLogData}
+          onClose={handleCloseTraceLogs}
+          onRefresh={handleRefreshTraceLogs}
+        />
+      )}
+
+      {showOptionSets && (
+        <OptionSetsViewer
+          data={optionSetData}
+          onClose={handleCloseOptionSets}
+          onRefresh={handleRefreshOptionSets}
         />
       )}
     </div>

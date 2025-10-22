@@ -2,7 +2,7 @@
 // It communicates with the content script via custom events
 
 // Listen for requests from content script
-window.addEventListener('D365_HELPER_REQUEST', (event: any) => {
+window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
   const { action, data, requestId } = event.detail;
 
   try {
@@ -10,7 +10,9 @@ window.addEventListener('D365_HELPER_REQUEST', (event: any) => {
 
     const Xrm = (window as any).Xrm;
 
-    if (!Xrm || !Xrm.Page) {
+    const requiresFormContext = action !== 'GET_PLUGIN_TRACE_LOGS';
+
+    if (requiresFormContext && (!Xrm || !Xrm.Page)) {
       throw new Error('Xrm.Page not available');
     }
 
@@ -171,6 +173,92 @@ window.addEventListener('D365_HELPER_REQUEST', (event: any) => {
         });
         console.log('D365 Helper: Found', controlInfo.length, 'controls');
         result = controlInfo;
+        break;
+
+      case 'DISABLE_REQUIRED_FIELDS':
+        const requiredAttributes = Xrm.Page.data.entity.attributes.get();
+        let disabledCount = 0;
+        requiredAttributes.forEach((attr: any) => {
+          try {
+            if (typeof attr.getRequiredLevel === 'function' && typeof attr.setRequiredLevel === 'function') {
+              const level = attr.getRequiredLevel();
+              if (level && level.toLowerCase && level.toLowerCase() !== 'none') {
+                attr.setRequiredLevel('none');
+                disabledCount++;
+              }
+            }
+          } catch (e) {
+            // ignore failures
+          }
+        });
+        result = { disabledCount };
+        break;
+
+      case 'GET_OPTION_SETS':
+        const optionAttributes = Xrm.Page.data.entity.attributes.get();
+        const optionResults: any[] = [];
+
+        optionAttributes.forEach((attr: any) => {
+          try {
+            if (!attr || typeof attr.getAttributeType !== 'function') {
+              return;
+            }
+
+            const attributeType = attr.getAttributeType && attr.getAttributeType();
+            if (!['optionset', 'multioptionset', 'boolean'].includes(attributeType)) {
+              return;
+            }
+
+            const logicalName = typeof attr.getName === 'function' ? attr.getName() : 'unknown';
+            const controls = attr.controls && attr.controls.get ? attr.controls.get() : [];
+            let displayLabel = logicalName;
+            if (controls && controls.length > 0 && typeof controls[0].getLabel === 'function') {
+              displayLabel = controls[0].getLabel() || displayLabel;
+            }
+
+            let options: any[] = [];
+            if (typeof attr.getOptions === 'function') {
+              options = attr.getOptions() || [];
+            }
+
+            const mappedOptions = options.map((option: any) => {
+              const label = option?.text || option?.label?.LocalizedLabels?.[0]?.Label || option?.label?.UserLocalizedLabel?.Label || (option?.value != null ? option.value.toString() : 'Unnamed');
+              return {
+                value: option?.value,
+                label,
+                color: option?.color || option?.Color || null,
+                isDefault: Boolean(option?.defaultSelected || option?.Default || option?.isDefault)
+              };
+            });
+
+            if (mappedOptions.length === 0) {
+              return;
+            }
+
+            const currentValue = typeof attr.getValue === 'function' ? attr.getValue() : null;
+            const currentValueLabel = typeof attr.getText === 'function' ? attr.getText() : '';
+            const isMultiSelect = attributeType === 'multioptionset';
+
+            optionResults.push({
+              logicalName,
+              displayLabel,
+              attributeType,
+              isMultiSelect,
+              currentValue,
+              currentValueLabel,
+              optionCount: mappedOptions.length,
+              options: mappedOptions
+            });
+          } catch (e) {
+            console.warn('D365 Helper: Failed to process option set attribute', e);
+          }
+        });
+
+        optionResults.sort((a, b) => (a.displayLabel || '').localeCompare(b.displayLabel || ''));
+
+        result = {
+          attributes: optionResults
+        };
         break;
 
       case 'GET_FORM_LIBRARIES':
@@ -1013,6 +1101,98 @@ window.addEventListener('D365_HELPER_REQUEST', (event: any) => {
           onChange: onChangeHandlers,
           onSave: onSaveHandlers
         };
+        break;
+
+      case 'GET_PLUGIN_TRACE_LOGS':
+        if (!Xrm || !Xrm.WebApi || typeof Xrm.WebApi.retrieveMultipleRecords !== 'function') {
+          result = {
+            logs: [],
+            error: 'Xrm.WebApi not available. Make sure you are in the Dynamics 365 app.'
+          };
+          break;
+        }
+
+        try {
+          const top = Math.min(Math.max(Number(data?.top) || 20, 1), 200);
+          const query = `?$orderby=createdon desc&$top=${top}`;
+
+          // Try multiple entity names as D365 versions differ
+          let response;
+          let entityNameUsed = '';
+          const entityNames = ['plugintracelog', 'plugintracelogbase', 'plugintypetracelog'];
+
+          for (const entityName of entityNames) {
+            try {
+              response = await Xrm.WebApi.retrieveMultipleRecords(entityName, query);
+              entityNameUsed = entityName;
+              console.log('D365 Helper: Successfully retrieved trace logs using entity name:', entityName);
+              break;
+            } catch (err: any) {
+              console.log('D365 Helper: Failed with entity name:', entityName, err?.message);
+              // Continue to next entity name
+            }
+          }
+
+          if (!response) {
+            throw new Error('Unable to retrieve plugin trace logs. Tried entity names: ' + entityNames.join(', '));
+          }
+
+          const logs = response.entities.map((log: any) => ({
+            id:
+              log.plugintracelogid ||
+              log.plugintypetracelogid ||
+              log['plugintypetracelogid'] ||
+              log.plugintypetracelogid_guid ||
+              Math.random().toString(36).slice(2),
+            createdOn: log.createdon,
+            messageName: log.messagename,
+            primaryEntity: log.primaryentity,
+            typeName: log.typename,
+            mode: log.mode,
+            depth: log.depth,
+            operationCorrelationId:
+              log.operationcorrelationid ||
+              log.correlationid ||
+              log.operationCorrelationId,
+            performanceDurationMs:
+              log.performanceexecutionduration ??
+              log.executionduration ??
+              log.processduration,
+            executionStart:
+              log.performanceexecutionstarttime ||
+              log.executionstarttime ||
+              log.PerformanceExecutionStartTime,
+            requestId: log.requestid || log.RequestId,
+            exceptionDetails: log.exceptiondetails || log.ExceptionDetails,
+            messageBlock: log.messageblock || log.messagelog || log.MessageBlock || log.MessageLog
+          }));
+
+          result = {
+            logs,
+            moreRecords: Boolean(response.nextLink)
+          };
+        } catch (error: any) {
+          console.error('D365 Helper: Failed to retrieve plugin trace logs', error);
+          const status = error?.status ?? error?.httpStatusCode;
+          const rawMessage = typeof error?.message === 'string' ? error.message : '';
+          let errorMessage =
+            'Failed to retrieve plugin trace logs. Ensure tracing is enabled and you have permission to read the Plug-in Trace Log table.';
+
+          if (status === 404) {
+            errorMessage =
+              'The Plug-in Trace Log table is not available. Enable plug-in trace logging (Settings → Administration → System Settings → Customization) and confirm your solution includes the Plug-in Trace Log table.';
+          } else if (status === 403 || status === 401) {
+            errorMessage =
+              'You do not have permission to read plug-in trace logs. Ask your administrator for Read access to the Plug-in Trace Log table.';
+          } else if (rawMessage) {
+            errorMessage = rawMessage;
+          }
+
+          result = {
+            logs: [],
+            error: errorMessage
+          };
+        }
         break;
 
       default:

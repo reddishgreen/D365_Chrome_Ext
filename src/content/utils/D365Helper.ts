@@ -113,10 +113,14 @@ export class D365Helper {
     }
   }
 
-  // Get Plugin Trace Logs URL
-  getPluginTraceLogsUrl(): string {
-    const orgUrl = this.getOrgUrl();
-    return `${orgUrl}/main.aspx?forceUCI=1&pagetype=entitylist&etn=plugintypetracelog`;
+  // Retrieve plugin trace logs
+  async getPluginTraceLogs(limit: number = 20): Promise<any> {
+    try {
+      return await this.sendRequest('GET_PLUGIN_TRACE_LOGS', { top: limit });
+    } catch (error) {
+      console.error('Error retrieving plugin trace logs:', error);
+      throw error;
+    }
   }
 
   // Toggle all fields visibility
@@ -167,6 +171,27 @@ export class D365Helper {
       return result.filledCount;
     } catch (error) {
       console.error('Error auto-filling form:', error);
+      throw error;
+    }
+  }
+
+  // Disable field requirements
+  async disableFieldRequirements(): Promise<number> {
+    try {
+      const result = await this.sendRequest('DISABLE_REQUIRED_FIELDS');
+      return result.disabledCount;
+    } catch (error) {
+      console.error('Error disabling field requirements:', error);
+      throw error;
+    }
+  }
+
+  // Retrieve option sets for current form
+  async getOptionSets(): Promise<any> {
+    try {
+      return await this.sendRequest('GET_OPTION_SETS');
+    } catch (error) {
+      console.error('Error retrieving option sets:', error);
       throw error;
     }
   }

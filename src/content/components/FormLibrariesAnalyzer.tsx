@@ -111,7 +111,15 @@ const FormLibrariesAnalyzer: React.FC<FormLibrariesAnalyzerProps> = ({ data, onC
                     onClick={() => handleCopy(`${library}.${handler.functionName}`, `${library}.${handler.functionName}`)}
                     title="Copy function reference"
                   >
-                    {copiedText === `${library}.${handler.functionName}` ? '✓' : '📋'}
+                    {copiedText === `${library}.${handler.functionName}` ? (
+                      <span className="d365-copy-success">✓</span>
+                    ) : (
+                      <img
+                        src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                        alt="Copy"
+                        className="d365-copy-icon"
+                      />
+                    )}
                   </button>
                 </div>
               ))}
@@ -234,7 +242,15 @@ const FormLibrariesAnalyzer: React.FC<FormLibrariesAnalyzerProps> = ({ data, onC
                         onClick={() => handleCopy(lib.name, lib.name)}
                         title="Copy library name"
                       >
-                        {copiedText === lib.name ? '✓' : '📋'}
+                        {copiedText === lib.name ? (
+                          <span className="d365-copy-success">✓</span>
+                        ) : (
+                          <img
+                            src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                            alt="Copy"
+                            className="d365-copy-icon"
+                          />
+                        )}
                       </button>
                     </div>
                   ))}

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(node create-icons.js)",
       "Bash(git init)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(powershell \"Compress-Archive -Path * -DestinationPath ../D365_Helper_Extension.zip -Force\")"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="480px" height="480px">
+  <polygon points="18.982,92 18.982,16 52.982,16 78.982,40 78.982,92" opacity=".35" />
+  <polygon fill="#0037ff" points="18.982,88 18.982,12 66,12 79,25 78.982,88" />
+  <polygon points="41.018,112 41.018,36 75.018,36 101.018,60 101.018,112" opacity=".35" />
+  <polygon fill="#0075ff" points="41.018,108 41.018,32 88,32 101,45 101.018,108" />
+  <rect width="36" height="6" x="53" y="72" opacity=".35" />
+  <rect width="36" height="6" x="53" y="68" fill="#a4e2f1" />
+  <rect width="36" height="6" x="53" y="89" opacity=".35" />
+  <rect width="36" height="6" x="53" y="85" fill="#a4e2f1" />
+  <rect width="10" height="6" x="31" y="71" opacity=".35" />
+  <rect width="10" height="6" x="31" y="67" fill="#a4e2f1" />
+  <rect width="10" height="6" x="31" y="54" opacity=".35" />
+  <rect width="10" height="6" x="31" y="50" fill="#a4e2f1" />
+  <polygon points="88,32 88,50 101,45" opacity=".35" />
+  <polygon points="66,12 66,30 79,25" opacity=".35" />
+  <polygon fill="#a4e2f1" points="88,32 88,45 101,45" />
+  <polygon fill="#a4e2f1" points="66,12 66,25 79,25" />
+</svg>

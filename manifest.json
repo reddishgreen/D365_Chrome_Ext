@@ -50,7 +50,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["webapi-viewer.html", "injected.bundle.js"],
+      "resources": ["webapi-viewer.html", "injected.bundle.js", "icons/RG%20Logo_White_Stacked.svg", "icons/rg_copy.svg"],
       "matches": [
         "https://*.dynamics.com/*",
         "https://*.crm.dynamics.com/*",
