@@ -1,10 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node create-icons.js)",
-      "Bash(git init)",
+      "Bash(powershell -Command \"Get-Item d365-helper-extension.zip | Select-Object Name, Length, LastWriteTime\")",
+      "Bash(powershell -Command:*)",
+      "Bash(unzip:*)",
       "Bash(npm run build:*)",
-      "Bash(powershell \"Compress-Archive -Path * -DestinationPath ../D365_Helper_Extension.zip -Force\")"
+      "Bash(node create-zip.js:*)"
     ],
     "deny": [],
     "ask": []

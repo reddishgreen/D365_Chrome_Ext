@@ -7,9 +7,7 @@
   "author": "D365 Developer Tools",
   "homepage_url": "https://github.com/yourusername/d365-helper",
   "permissions": [
-    "activeTab",
-    "clipboardWrite",
-    "storage"
+    "clipboardWrite"
   ],
   "host_permissions": [
     "https://*.dynamics.com/*",
