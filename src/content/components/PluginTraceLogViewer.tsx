@@ -83,7 +83,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
           <div className="d365-dialog-header d365-trace-header">
             <h2>Plugin Trace Logs</h2>
             <button className="d365-dialog-close" onClick={onClose} title="Close">
-              ✕
+              ×
             </button>
           </div>
           <div className="d365-dialog-content">
@@ -318,7 +318,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
               ↻
             </button>
             <button className="d365-dialog-close" onClick={onClose} title="Close">
-              ✕
+              ×
             </button>
           </div>
         </div>

@@ -3,7 +3,7 @@
 ## Chrome Web Store Listing
 
 ### Short Description (132 char max)
-Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view schemas, edit Web API data, unlock fields & more!
+Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view schemas, inspect Web API data & streamline testing.
 
 ### Detailed Description
 
@@ -14,7 +14,7 @@ Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view sche
 ### Field Management
 - **Show/Hide All Fields** - Toggle visibility of all form fields instantly
 - **Show/Hide All Sections** - Expand or collapse all form sections
-- **Unlock Fields** - Remove readonly restrictions from locked fields
+- **Enable Field Editing** - Make read-only fields editable for testing and development
 - **Auto Fill** - Automatically populate empty fields with test data
 
 ### Schema Tools
@@ -25,7 +25,7 @@ Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view sche
 ### Web API Viewer
 - **View Record Data** - Beautiful, syntax-highlighted JSON viewer for record data
 - **Edit Mode** - Directly edit field values including lookup fields
-- **Bypass Plugins** - Option to skip custom plugins and workflows when saving
+- **Skip Business Logic** - Option to save without triggering workflows (for testing)
 - **Search & Filter** - Quickly find specific fields in large records
 - **Copy Values** - Copy button on every field value
 
@@ -44,9 +44,9 @@ Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view sche
 
 ## 🎯 Use Cases
 - **Development**: Quickly view and copy schema names while building solutions
-- **Testing**: Auto-fill forms with test data and bypass validation plugins
+- **Testing**: Auto-fill forms with test data and skip business logic for faster testing
 - **Debugging**: View Web API data to troubleshoot issues
-- **Administration**: Unlock fields to update locked records
+- **Administration**: Enable field editing to update system-controlled records
 - **Training**: Show schema names to learn the data model
 
 ## 🔒 Privacy & Security

@@ -20,7 +20,7 @@ Use this as a quick copy-paste reference while filling out the Chrome Web Store 
 
 **Summary** (132 char max):
 ```
-Developer toolkit for D365: manage fields, view schemas, edit Web API data, unlock fields, auto-fill forms & bypass plugins.
+Developer toolkit for D365: manage fields, view schemas, inspect Web API data, enable field editing & streamline testing.
 ```
 
 **Category**: Developer Tools
@@ -34,7 +34,7 @@ Developer toolkit for D365: manage fields, view schemas, edit Web API data, unlo
 ### 1. Single Purpose Description
 
 ```
-This extension provides developer productivity tools exclusively for Microsoft Dynamics 365, including field management, schema name display, Web API data viewing and editing capabilities.
+This extension provides developer productivity tools exclusively for Microsoft Dynamics 365, including field management, schema name display, Web API data inspection, and developer testing features.
 ```
 
 ### 2. Permissions Justifications

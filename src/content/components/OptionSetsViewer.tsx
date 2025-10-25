@@ -112,7 +112,15 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
                 onClick={() => handleCopy(`${option.value} - ${option.label}`, key)}
                 title="Copy value and label"
               >
-                {copiedKey === key ? 'V' : '??'}
+                {copiedKey === key ? (
+                  <span className="d365-copy-success">✓</span>
+                ) : (
+                  <img
+                    src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                    alt="Copy"
+                    className="d365-copy-icon"
+                  />
+                )}
               </button>
             </div>
           );
@@ -185,7 +193,15 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
                         onClick={() => handleCopy(attribute.logicalName, `${attribute.logicalName}-logical`)}
                         title="Copy logical name"
                       >
-                        {copiedKey === `${attribute.logicalName}-logical` ? 'V' : '??'}
+                        {copiedKey === `${attribute.logicalName}-logical` ? (
+                          <span className="d365-copy-success">✓</span>
+                        ) : (
+                          <img
+                            src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                            alt="Copy"
+                            className="d365-copy-icon"
+                          />
+                        )}
                       </button>
                       {attribute.optionCount > 0 && (
                         <button
@@ -193,7 +209,18 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
                           onClick={() => handleCopy(serializedOptions, copyKey)}
                           title="Copy all options (Tab separated)"
                         >
-                          {copiedKey === copyKey ? 'V Copied' : 'Copy All'}
+                          {copiedKey === copyKey ? (
+                            <span className="d365-copy-success">✓ Copied</span>
+                          ) : (
+                            <>
+                              <img
+                                src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                                alt="Copy"
+                                className="d365-copy-icon"
+                              />
+                              <span>Copy All</span>
+                            </>
+                          )}
                         </button>
                       )}
                     </div>
@@ -219,10 +246,10 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
               onClick={onRefresh}
               title="Refresh option set values"
             >
-              ??
+              ↻
             </button>
             <button className="d365-dialog-close" onClick={onClose} title="Close">
-              ?
+              ×
             </button>
           </div>
         </div>
@@ -246,7 +273,7 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
                   onClick={() => setSearchTerm('')}
                   title="Clear search"
                 >
-                  ?
+                  ×
                 </button>
               )}
             </div>
