@@ -200,31 +200,31 @@ const D365Toolbar: React.FC = () => {
   const handleUnlockFields = async () => {
     try {
       const count = await helper.unlockFields();
-      showNotification(`Unlocked ${count} fields!`);
+      showNotification(`Enabled editing for ${count} fields`);
     } catch (error) {
-      showNotification('Error unlocking fields');
+      showNotification('Error enabling field editing');
     }
   };
 
   const handleAutoFill = async () => {
     try {
       const count = await helper.autoFillForm();
-      showNotification(`Auto-filled ${count} fields!`);
+      showNotification(`Added test data to ${count} fields`);
     } catch (error) {
-      showNotification('Error auto-filling form');
+      showNotification('Error adding test data');
     }
   };
 
-  const handleEnableGodMode = async () => {
+  const handleEnableDevMode = async () => {
     try {
-      showNotification('Activating God Mode...');
+      showNotification('Activating Developer Mode...');
       await helper.toggleAllFields(true);
       await helper.toggleAllSections(true);
       const unlocked = await helper.unlockFields();
       const disabled = await helper.disableFieldRequirements();
-      showNotification(`God Mode enabled: unlocked ${unlocked} and removed requirements from ${disabled}.`);
+      showNotification(`Dev Mode: enabled ${unlocked} fields and ${disabled} controls for testing.`);
     } catch (error) {
-      showNotification('Error enabling God Mode');
+      showNotification('Error enabling Developer Mode');
     }
   };
 
@@ -328,27 +328,27 @@ const D365Toolbar: React.FC = () => {
         </div>
 
         <div className="d365-toolbar-section">
-          <span className="d365-toolbar-section-label">Form:</span>
+          <span className="d365-toolbar-section-label">Dev Tools:</span>
           <button
             className="d365-toolbar-btn"
             onClick={handleUnlockFields}
-            title="Unlock all readonly fields"
+            title="Enable editing for development and testing"
           >
-            Unlock Fields
+            Enable Editing
           </button>
           <button
             className="d365-toolbar-btn"
             onClick={handleAutoFill}
-            title="Auto-fill empty fields with sample data"
+            title="Fill fields with test data for development"
           >
-            Auto Fill
+            Test Data
           </button>
           <button
             className="d365-toolbar-btn"
-            onClick={handleEnableGodMode}
-            title="Reveal hidden fields, unlock read-only controls, and remove required flags"
+            onClick={handleEnableDevMode}
+            title="Show all fields and enable all controls for development"
           >
-            God Mode
+            Dev Mode
           </button>
         </div>
 

@@ -55,6 +55,10 @@ const Popup: React.FC = () => {
           <p>
             D365 Helper is a developer toolkit designed to make working with Dynamics 365 faster and more efficient.
           </p>
+          <p className="warning" style={{color: '#d97706', fontSize: '13px', marginTop: '10px'}}>
+            <strong>⚠️ Important:</strong> This extension is for authorized developers only.
+            Use only on systems you have permission to modify. All data modifications require proper D365 security roles.
+          </p>
         </section>
       </div>
 

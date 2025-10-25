@@ -31,7 +31,7 @@ const WebAPIViewer: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['root']));
   const [editMode, setEditMode] = useState<boolean>(false);
-  const [bypassPlugins, setBypassPlugins] = useState<boolean>(false);
+  const [skipPluginExecution, setSkipPluginExecution] = useState<boolean>(false);
   const [entityLogicalName, setEntityLogicalName] = useState<string | null>(null);
 
   const entityMetadataCache = useRef<Map<string, LookupEntityMetadata>>(new Map());
@@ -362,8 +362,8 @@ const WebAPIViewer: React.FC = () => {
         'OData-Version': '4.0',
       };
 
-      // Add plugin bypass headers if requested
-      if (bypassPlugins) {
+      // Add headers to skip plugin execution if requested (for development/testing)
+      if (skipPluginExecution) {
         headers['MSCRM.SuppressCallbackRegistrationExpanderJob'] = 'true';
         headers['MSCRM.BypassCustomPluginExecution'] = 'true';
       }
@@ -717,10 +717,10 @@ const filterData = (obj: any, term: string): any => {
               <label className="checkbox-label-inline">
                 <input
                   type="checkbox"
-                  checked={bypassPlugins}
-                  onChange={(e) => setBypassPlugins(e.target.checked)}
+                  checked={skipPluginExecution}
+                  onChange={(e) => setSkipPluginExecution(e.target.checked)}
                 />
-                <span>Bypass Plugins</span>
+                <span>Skip Plugin Execution</span>
               </label>
               <button onClick={handleSaveChanges} disabled={saving || !editedData} className="btn btn-success">
                 {saving ? 'Saving...' : '💾 Save'}
@@ -728,6 +728,9 @@ const filterData = (obj: any, term: string): any => {
               <button onClick={handleEditModeToggle} disabled={saving} className="btn btn-secondary">
                 ✕ Cancel
               </button>
+              <div className="warning-text" style={{marginLeft: '10px', color: '#ff6b6b', fontSize: '12px'}}>
+                ⚠️ For authorized development/testing only
+              </div>
             </>
           ) : (
             <button onClick={handleEditModeToggle} disabled={!data} className="btn btn-primary">

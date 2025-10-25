@@ -3,9 +3,8 @@
   "name": "D365 Helper - Developer Toolkit",
   "short_name": "D365 Helper",
   "version": "1.0.0",
-  "description": "Developer toolkit for D365: manage fields, view schemas, inspect Web API data, enable field editing & streamline testing.",
+  "description": "Dev toolkit for D365.",
   "author": "D365 Developer Tools",
-  "homepage_url": "https://github.com/yourusername/d365-helper",
   "permissions": [
     "clipboardWrite"
   ],
