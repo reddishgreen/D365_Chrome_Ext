@@ -144,8 +144,9 @@ export class D365Helper {
     try {
       const environmentId = await this.getEnvironmentId();
       if (environmentId) {
-        // Explicitly add /solutions to the end
-        return `https://make.powerapps.com/environments/${environmentId}/solutions`;
+        // Add timestamp to prevent caching
+        const timestamp = Date.now();
+        return `https://make.powerapps.com/environments/${environmentId}/solutions?_=${timestamp}`;
       }
       return `https://make.powerapps.com/`;
     } catch {
