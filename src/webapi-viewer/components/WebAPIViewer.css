@@ -297,6 +297,15 @@
   color: #666;
   transition: all 0.2s ease;
   margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-btn img {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .copy-btn:hover {

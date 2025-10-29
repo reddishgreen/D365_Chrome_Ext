@@ -210,43 +210,55 @@ const WebAPIViewer: React.FC = () => {
         return cached;
       }
 
-      const attributeUrl = `${apiBaseUrl}EntityDefinitions(LogicalName='${escapeODataIdentifier(
-        entityLogical
-      )}')/Attributes(LogicalName='${escapeODataIdentifier(
-        attributeName
-      )}')/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=Targets`;
+      try {
+        const attributeUrl = `${apiBaseUrl}EntityDefinitions(LogicalName='${escapeODataIdentifier(
+          entityLogical
+        )}')/Attributes(LogicalName='${escapeODataIdentifier(
+          attributeName
+        )}')/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=Targets`;
 
-      const response = await fetch(attributeUrl, {
-        headers: {
-          Accept: 'application/json',
-          'OData-MaxVersion': '4.0',
-          'OData-Version': '4.0',
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to load lookup targets (${response.status}): ${errorText}`);
-      }
-
-      const json = await response.json();
-      let targets: string[] = [];
-
-      if (Array.isArray(json?.Targets)) {
-        targets = json.Targets.filter((item: unknown): item is string => typeof item === 'string');
-      } else if (Array.isArray(json?.value)) {
-        json.value.forEach((item: any) => {
-          if (Array.isArray(item?.Targets)) {
-            targets.push(
-              ...item.Targets.filter((target: unknown): target is string => typeof target === 'string')
-            );
-          }
+        const response = await fetch(attributeUrl, {
+          headers: {
+            Accept: 'application/json',
+            'OData-MaxVersion': '4.0',
+            'OData-Version': '4.0',
+          },
+          credentials: 'include',
         });
-      }
 
-      lookupTargetsCache.current.set(cacheKey, targets);
-      return targets;
+        if (!response.ok) {
+          // If attribute doesn't exist or isn't a lookup, return empty array
+          // The lookup editor will use the current logical name as fallback
+          console.warn(`Could not load lookup targets for ${entityLogical}.${attributeName}: ${response.status}`);
+          const emptyTargets: string[] = [];
+          lookupTargetsCache.current.set(cacheKey, emptyTargets);
+          return emptyTargets;
+        }
+
+        const json = await response.json();
+        let targets: string[] = [];
+
+        if (Array.isArray(json?.Targets)) {
+          targets = json.Targets.filter((item: unknown): item is string => typeof item === 'string');
+        } else if (Array.isArray(json?.value)) {
+          json.value.forEach((item: any) => {
+            if (Array.isArray(item?.Targets)) {
+              targets.push(
+                ...item.Targets.filter((target: unknown): target is string => typeof target === 'string')
+              );
+            }
+          });
+        }
+
+        lookupTargetsCache.current.set(cacheKey, targets);
+        return targets;
+      } catch (error) {
+        // Network error or other fetch error - return empty array
+        console.warn(`Error loading lookup targets for ${entityLogical}.${attributeName}:`, error);
+        const emptyTargets: string[] = [];
+        lookupTargetsCache.current.set(cacheKey, emptyTargets);
+        return emptyTargets;
+      }
     },
     [apiBaseUrl]
   );
@@ -480,7 +492,7 @@ const WebAPIViewer: React.FC = () => {
               onClick={() => handleCopyValue(currentGuid)}
               title="Copy lookup GUID"
             >
-              ??
+              <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
             </button>
           </>
         );
@@ -491,7 +503,7 @@ const WebAPIViewer: React.FC = () => {
           <>
             <span className="value-null">null</span>
             <button className="copy-btn" onClick={() => handleCopyValue(null)} title="Copy value">
-              ??
+              <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
             </button>
           </>
         );
@@ -513,7 +525,7 @@ const WebAPIViewer: React.FC = () => {
             onClick={() => handleCopyValue(currentGuid)}
             title="Copy lookup GUID"
           >
-            ??
+            <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
           </button>
         </>
       );
@@ -534,7 +546,7 @@ const WebAPIViewer: React.FC = () => {
             <span className="value-null">null</span>
           )}
           <button className="copy-btn" onClick={() => handleCopyValue(null)} title="Copy value">
-            ??
+            <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
           </button>
         </>
       );
@@ -556,7 +568,7 @@ const WebAPIViewer: React.FC = () => {
             <span className="value-boolean">{currentValue.toString()}</span>
           )}
           <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
-            ??
+            <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
           </button>
         </>
       );
@@ -576,7 +588,7 @@ const WebAPIViewer: React.FC = () => {
             <span className="value-number">{currentValue}</span>
           )}
           <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
-            ??
+            <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
           </button>
         </>
       );
@@ -599,7 +611,7 @@ const WebAPIViewer: React.FC = () => {
               </span>
             )}
             <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
-              ??
+              <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
             </button>
           </>
         );
@@ -618,7 +630,7 @@ const WebAPIViewer: React.FC = () => {
             <span className="value-string">"{currentValue}"</span>
           )}
           <button className="copy-btn" onClick={() => handleCopyValue(currentValue)} title="Copy value">
-            ??
+            <img src={chrome.runtime.getURL('icons/rg_copy.svg')} alt="Copy" />
           </button>
         </>
       );

@@ -134,7 +134,7 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
       return (
         <div className="d365-dialog-content d365-options-content">
           <div className="d365-dialog-error">
-            <div className="d365-dialog-error-icon">??</div>
+            <div className="d365-dialog-error-icon">⚠</div>
             <div className="d365-dialog-error-message">{data.error}</div>
             <div className="d365-dialog-error-hint">
               Open an entity form and make sure it contains option set or picklist fields.

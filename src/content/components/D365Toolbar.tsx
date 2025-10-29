@@ -131,6 +131,30 @@ const D365Toolbar: React.FC = () => {
     }
   };
 
+  const handleOpenSolutions = async () => {
+    try {
+      const url = await helper.getSolutionsUrl();
+      if (url) {
+        window.open(url, '_blank');
+        showNotification('Opening solutions...');
+      } else {
+        showNotification('Unable to open solutions');
+      }
+    } catch (error) {
+      showNotification('Error opening solutions');
+    }
+  };
+
+  const handleOpenAdminCenter = () => {
+    try {
+      const url = helper.getAdminCenterUrl();
+      window.open(url, '_blank');
+      showNotification('Opening admin center...');
+    } catch (error) {
+      showNotification('Error opening admin center');
+    }
+  };
+
   const loadPluginTraceLogs = async (openModal: boolean = false) => {
     try {
       showNotification('Loading plugin trace logs...');
@@ -245,6 +269,12 @@ const D365Toolbar: React.FC = () => {
     setLibrariesData(null);
   };
 
+  const handleCacheRefresh = () => {
+    showNotification('Performing cache refresh...');
+    // Trigger Ctrl+F5 (hard refresh)
+    location.reload();
+  };
+
   if (isMinimized) {
     return (
       <div ref={toolbarRef} className="d365-toolbar d365-toolbar-minimized">
@@ -328,6 +358,24 @@ const D365Toolbar: React.FC = () => {
         </div>
 
         <div className="d365-toolbar-section">
+          <span className="d365-toolbar-section-label">Navigation:</span>
+          <button
+            className="d365-toolbar-btn"
+            onClick={handleOpenSolutions}
+            title="Open solutions page"
+          >
+            Solutions
+          </button>
+          <button
+            className="d365-toolbar-btn"
+            onClick={handleOpenAdminCenter}
+            title="Open Power Platform admin center"
+          >
+            Admin Center
+          </button>
+        </div>
+
+        <div className="d365-toolbar-section">
           <span className="d365-toolbar-section-label">Dev Tools:</span>
           <button
             className="d365-toolbar-btn"
@@ -363,17 +411,17 @@ const D365Toolbar: React.FC = () => {
           </button>
           <button
             className="d365-toolbar-btn"
+            onClick={handleCacheRefresh}
+            title="Perform hard refresh (Ctrl+F5) to clear cache"
+          >
+            Cache Refresh
+          </button>
+          <button
+            className="d365-toolbar-btn"
             onClick={handleOpenWebAPI}
             title="Open Web API data in new tab"
           >
             Web API
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleOpenFormEditor}
-            title="Open form in editor"
-          >
-            Form Editor
           </button>
           <button
             className="d365-toolbar-btn"

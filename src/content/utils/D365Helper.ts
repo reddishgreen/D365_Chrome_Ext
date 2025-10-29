@@ -113,6 +113,51 @@ export class D365Helper {
     }
   }
 
+  // Get environment ID by querying the Web API
+  async getEnvironmentId(): Promise<string | null> {
+    try {
+      const orgUrl = this.getOrgUrl();
+      const response = await fetch(`${orgUrl}/api/data/v9.2/RetrieveCurrentOrganization()`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // The EnvironmentId property contains the actual environment GUID
+        return data.EnvironmentId?.replace(/[{}]/g, '');
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting environment ID:', error);
+      return null;
+    }
+  }
+
+  // Get solutions page URL (Power Apps maker portal)
+  async getSolutionsUrl(): Promise<string | null> {
+    try {
+      const environmentId = await this.getEnvironmentId();
+      if (environmentId) {
+        // Explicitly add /solutions to the end
+        return `https://make.powerapps.com/environments/${environmentId}/solutions`;
+      }
+      return `https://make.powerapps.com/`;
+    } catch {
+      return `https://make.powerapps.com/`;
+    }
+  }
+
+  // Get Power Platform admin center URL
+  getAdminCenterUrl(): string {
+    return `https://admin.powerplatform.microsoft.com/manage/environments`;
+  }
+
   // Retrieve plugin trace logs
   async getPluginTraceLogs(limit: number = 20): Promise<any> {
     try {

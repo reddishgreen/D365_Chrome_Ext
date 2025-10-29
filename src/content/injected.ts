@@ -10,7 +10,7 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
 
     const Xrm = (window as any).Xrm;
 
-    const requiresFormContext = action !== 'GET_PLUGIN_TRACE_LOGS';
+    const requiresFormContext = action !== 'GET_PLUGIN_TRACE_LOGS' && action !== 'GET_ENVIRONMENT_ID';
 
     if (requiresFormContext && (!Xrm || !Xrm.Page)) {
       throw new Error('Xrm.Page not available');
@@ -27,6 +27,11 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
 
       case 'GET_FORM_ID':
         result = Xrm.Page.ui.formSelector.getCurrentItem().getId();
+        break;
+
+      case 'GET_ENVIRONMENT_ID':
+        // Get the organization ID which is the environment ID
+        result = Xrm.Utility.getGlobalContext().organizationSettings.organizationId.replace(/[{}]/g, '');
         break;
 
       case 'TOGGLE_FIELDS':
