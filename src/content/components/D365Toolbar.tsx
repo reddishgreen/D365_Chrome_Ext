@@ -16,8 +16,13 @@ const D365Toolbar: React.FC = () => {
   const [showOptionSets, setShowOptionSets] = useState(false);
   const [optionSetData, setOptionSetData] = useState<OptionSetsData | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const helperRef = useRef<D365Helper | null>(null);
 
-  const helper = new D365Helper();
+  // Create helper instance only once
+  if (!helperRef.current) {
+    helperRef.current = new D365Helper();
+  }
+  const helper = helperRef.current;
 
   const updateShellOffset = useCallback(() => {
     const toolbarHeight = toolbarRef.current?.getBoundingClientRect().height;

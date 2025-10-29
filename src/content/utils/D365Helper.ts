@@ -340,14 +340,27 @@ export class D365Helper {
 
   // Hide schema name overlay
   private hideSchemaOverlay(): void {
+    // Remove all overlays from DOM
     this.overlayElements.forEach(overlay => {
       try {
-        overlay.remove();
+        if (overlay.parentElement) {
+          overlay.parentElement.removeChild(overlay);
+        }
       } catch (error) {
         // Element might already be removed
       }
     });
     this.overlayElements = [];
+
+    // Also remove any orphaned overlays that might exist in the DOM
+    const orphanedOverlays = document.querySelectorAll('.d365-schema-overlay');
+    orphanedOverlays.forEach(overlay => {
+      try {
+        overlay.remove();
+      } catch (error) {
+        // Ignore
+      }
+    });
   }
 
   // Get form libraries and event handlers

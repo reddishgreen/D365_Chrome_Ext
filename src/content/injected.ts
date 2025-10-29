@@ -161,14 +161,15 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
                 }
               }
 
-              // Only include controls that have visible DOM elements
-              if (element || control.getVisible()) {
+              // Only include controls that are visible AND have visible DOM elements
+              const isVisible = control.getVisible();
+              if (element && isVisible) {
                 controlInfo.push({
                   schemaName: schemaName,
                   controlName: controlName,
                   label: control.getLabel ? control.getLabel() : schemaName,
-                  visible: control.getVisible(),
-                  elementFound: !!element
+                  visible: isVisible,
+                  elementFound: true
                 });
               }
             } catch (e) {
