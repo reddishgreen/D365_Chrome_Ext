@@ -129,8 +129,14 @@ export class D365Helper {
 
       if (response.ok) {
         const data = await response.json();
-        // The EnvironmentId property contains the actual environment GUID
-        return data.EnvironmentId?.replace(/[{}]/g, '');
+        // EnvironmentId is preferred, but fall back to Id/OrganizationId if needed
+        const rawEnvironmentId = data?.EnvironmentId ?? data?.Id ?? data?.OrganizationId;
+
+        if (rawEnvironmentId) {
+          return String(rawEnvironmentId).replace(/[{}]/g, '');
+        }
+
+        console.warn('Environment identifier not found in RetrieveCurrentOrganization response', data);
       }
       return null;
     } catch (error) {
