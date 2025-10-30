@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "D365 Helper - Developer Toolkit",
   "short_name": "D365 Helper",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Dev toolkit for D365.",
   "author": "D365 Developer Tools",
   "permissions": [
