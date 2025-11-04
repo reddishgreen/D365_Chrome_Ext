@@ -262,9 +262,25 @@ export class D365Helper {
     this.hideSchemaOverlay(); // Clear any existing overlays
 
     try {
+      // Get schema overlay color from settings
+      const settings = await chrome.storage.sync.get(['schemaOverlayColor']);
+      const overlayColor = settings.schemaOverlayColor || '#0078d4';
+
+      // Convert hex to rgba
+      const hexToRgba = (hex: string, alpha: number = 0.9): string => {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      };
+
+      const bgColor = hexToRgba(overlayColor, 0.9);
+
       const controlInfo = await this.sendRequest('GET_CONTROL_INFO');
 
       console.log('D365 Helper: Creating overlays for', controlInfo.length, 'controls');
+
+      const processedContainers = new Set<HTMLElement>();
 
       controlInfo.forEach((info: any) => {
         try {
@@ -290,6 +306,15 @@ export class D365Helper {
                           controlElement.parentElement;
 
             if (container) {
+              const parentElement = container as HTMLElement;
+
+              if (processedContainers.has(parentElement)) {
+                console.debug('D365 Helper: Container already processed for', info.schemaName);
+                return;
+              }
+
+              processedContainers.add(parentElement);
+
               const overlay = document.createElement('div');
               overlay.className = 'd365-schema-overlay';
               overlay.textContent = info.schemaName;
@@ -298,7 +323,7 @@ export class D365Helper {
                 position: absolute;
                 top: 0;
                 left: 0;
-                background: rgba(0, 120, 212, 0.9);
+                background: ${bgColor};
                 color: white;
                 padding: 2px 6px;
                 font-size: 11px;
@@ -318,7 +343,6 @@ export class D365Helper {
                 }, 1000);
               });
 
-              const parentElement = container as HTMLElement;
               const originalPosition = window.getComputedStyle(parentElement).position;
               if (originalPosition === 'static') {
                 parentElement.style.position = 'relative';
@@ -378,4 +402,15 @@ export class D365Helper {
       throw error;
     }
   }
+
+  // Get OData fields metadata for current entity
+  async getODataFields(): Promise<any> {
+    try {
+      return await this.sendRequest('GET_ODATA_FIELDS');
+    } catch (error) {
+      console.error('Error getting OData fields:', error);
+      throw error;
+    }
+  }
 }
+

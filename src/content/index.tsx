@@ -41,25 +41,62 @@ const initializeToolbar = () => {
     return;
   }
 
-  console.log('D365 Helper: Initializing toolbar on form page');
+  // Check if the tool should be shown
+  chrome.storage.sync.get(['showTool', 'toolbarPosition'], (result) => {
+    const showTool = result.showTool !== undefined ? result.showTool : true;
+    const toolbarPosition = result.toolbarPosition || 'top';
 
-  // Inject the page script first
-  injectPageScript();
+    if (!showTool) {
+      console.log('D365 Helper: Toolbar is disabled in settings');
+      return;
+    }
 
-  // Create container for toolbar
-  const toolbarContainer = document.createElement('div');
-  toolbarContainer.id = 'd365-helper-toolbar-root';
+    console.log('D365 Helper: Initializing toolbar on form page');
 
-  // Insert toolbar at the very top of body
-  document.body.insertBefore(toolbarContainer, document.body.firstChild);
+    // Inject the page script first
+    injectPageScript();
 
-  // Reserve vertical space for the toolbar
-  setShellContainerOffset(70);
+    // Create container for toolbar
+    const toolbarContainer = document.createElement('div');
+    toolbarContainer.id = 'd365-helper-toolbar-root';
 
-  // Render React toolbar
-  const root = ReactDOM.createRoot(toolbarContainer);
-  root.render(<D365Toolbar />);
+    // Apply position class to the root container
+    if (toolbarPosition === 'bottom') {
+      toolbarContainer.classList.add('toolbar-bottom');
+    }
+
+    // Insert toolbar at the very top of body
+    document.body.insertBefore(toolbarContainer, document.body.firstChild);
+
+    // Reserve vertical space for the toolbar
+    setShellContainerOffset(70, toolbarPosition);
+
+    // Render React toolbar
+    const root = ReactDOM.createRoot(toolbarContainer);
+    root.render(<D365Toolbar />);
+  });
 };
+
+// Listen for setting changes
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && (changes.showTool || changes.toolbarPosition || changes.schemaOverlayColor)) {
+    if (changes.showTool) {
+      const newValue = changes.showTool.newValue;
+      console.log('D365 Helper: showTool setting changed to:', newValue);
+    }
+    if (changes.toolbarPosition) {
+      const newValue = changes.toolbarPosition.newValue;
+      console.log('D365 Helper: toolbarPosition setting changed to:', newValue);
+    }
+    if (changes.schemaOverlayColor) {
+      const newValue = changes.schemaOverlayColor.newValue;
+      console.log('D365 Helper: schemaOverlayColor setting changed to:', newValue);
+    }
+
+    // Reload the page to apply the setting
+    window.location.reload();
+  }
+});
 
 // Initialize when DOM is ready
 const init = () => {

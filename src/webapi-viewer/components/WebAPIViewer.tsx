@@ -78,6 +78,15 @@ const WebAPIViewer: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    // Load skip plugins setting from chrome storage
+    chrome.storage.sync.get(['skipPluginsByDefault'], (result) => {
+      if (result.skipPluginsByDefault !== undefined) {
+        setSkipPluginExecution(result.skipPluginsByDefault);
+      }
+    });
+  }, []);
+
   const fetchData = async (url: string) => {
     setLoading(true);
     setError('');
@@ -719,7 +728,17 @@ const filterData = (obj: any, term: string): any => {
   return (
     <div className="webapi-viewer">
       <header className="viewer-header">
-        <h1>⚡ D365 Web API Viewer</h1>
+        <h1>
+          <img
+            className="viewer-logo"
+            src={chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg')}
+            alt="RG Logo"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          D365 Web API Viewer
+        </h1>
         <div className="header-actions">
           <button onClick={handleRefresh} disabled={loading || saving} className="btn btn-primary">
             🔄 Refresh

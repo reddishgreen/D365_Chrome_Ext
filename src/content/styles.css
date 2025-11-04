@@ -12,35 +12,56 @@
   padding: 0;
 }
 
+/* Bottom positioning */
+#d365-helper-toolbar-root.toolbar-bottom {
+  top: auto;
+  bottom: 0;
+}
+
 .d365-toolbar {
-  background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+  background: linear-gradient(135deg, #0C274C 0%, #1a3d6b 100%);
   color: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   padding: 0;
   margin: 0;
-  border-bottom: 2px solid #005a9e;
+  border-bottom: 2px solid #081a33;
 }
 
-.d365-toolbar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.d365-toolbar-title {
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: 0.5px;
+/* Bottom toolbar styling */
+.d365-toolbar-bottom {
+  border-bottom: none;
+  border-top: 2px solid #081a33;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .d365-toolbar-content {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* Single line - no wrapping */
   gap: 8px;
   padding: 8px 12px;
   align-items: center;
+  overflow-x: auto; /* Allow horizontal scrolling */
+  overflow-y: visible; /* Allow dropdowns to show */
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.d365-toolbar-content::-webkit-scrollbar {
+  height: 4px;
+}
+
+.d365-toolbar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.d365-toolbar-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.d365-toolbar-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .d365-toolbar-logo-section {
@@ -50,11 +71,20 @@
   margin-right: 12px;
 }
 
+.d365-toolbar-logo-section a {
+  display: inline-block;
+  line-height: 0;
+  cursor: pointer;
+  position: relative;
+  z-index: 10;
+}
+
 .d365-toolbar-logo {
   height: 40px;
   width: auto;
   object-fit: contain;
   display: block;
+  cursor: pointer;
 }
 
 .d365-toolbar-section {
@@ -75,7 +105,7 @@
 
 .d365-toolbar-btn {
   background: white;
-  color: #0078d4;
+  color: #000;
   border: none;
   padding: 6px 12px;
   border-radius: 3px;
@@ -104,33 +134,21 @@
   font-weight: 600;
 }
 
-.d365-toolbar-minimize,
-.d365-toolbar-maximize {
-  background: rgba(255, 255, 255, 0.2);
+.d365-toolbar-actions {
+  margin-left: auto;
+  flex-shrink: 0; /* Don't shrink the version badge */
+}
+
+.d365-toolbar-version-badge {
+  background: rgba(255, 255, 255, 0.15);
   color: white;
-  padding: 4px 10px;
-  font-size: 16px;
-  line-height: 1;
-}
-
-.d365-toolbar-minimize:hover,
-.d365-toolbar-maximize:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: none;
-}
-
-.d365-toolbar-minimized {
-  background: #0078d4;
-  padding: 4px 12px;
-  border-radius: 0 0 8px 8px;
-  width: fit-content;
-  margin: 0 auto;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.d365-toolbar-minimized .d365-toolbar-maximize {
-  font-size: 12px;
-  padding: 4px 12px;
+  padding: 6px 12px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  white-space: nowrap;
+  opacity: 0.85;
 }
 
 .d365-toolbar-notification {
@@ -233,8 +251,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 2px solid #0078d4;
-  background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+  border-bottom: 2px solid #081a33;
+  background: linear-gradient(135deg, #0C274C 0%, #1a3d6b 100%);
   color: white;
   border-radius: 8px 8px 0 0;
 }
@@ -575,8 +593,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 28px;
-  border-bottom: 2px solid #005a9e;
-  background: linear-gradient(135deg, #005a9e 0%, #0078d4 100%);
+  border-bottom: 2px solid #081a33;
+  background: linear-gradient(135deg, #0C274C 0%, #1a3d6b 100%);
   color: white;
 }
 
@@ -1253,5 +1271,156 @@
 
   .d365-options-table-row button {
     justify-self: flex-start;
+  }
+}
+
+/* OData Fields Viewer Styles */
+.d365-odata-modal {
+  max-width: none;
+  width: 95%;
+  max-height: 95vh;
+}
+
+.d365-odata-entity-info {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.d365-odata-table-container {
+  overflow-x: auto;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.d365-odata-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.d365-odata-table thead {
+  background: #f2f4f7;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.d365-odata-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: #555;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #ddd;
+}
+
+.d365-odata-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.15s ease;
+}
+
+.d365-odata-table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.d365-odata-table td {
+  padding: 10px 14px;
+  color: #333;
+  vertical-align: middle;
+}
+
+.d365-odata-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.d365-odata-cell-value {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.d365-odata-copy-btn {
+  padding: 4px;
+  min-width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.d365-odata-logical {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-weight: 500;
+  color: #1d3c72;
+}
+
+.d365-odata-schema {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #0078d4;
+}
+
+.d365-odata-type {
+  color: #666;
+  font-size: 12px;
+}
+
+.d365-odata-bind {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #c7254e;
+  font-size: 12px;
+  background: #f9f2f4;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.d365-odata-options {
+  max-width: 300px;
+}
+
+.d365-odata-truncated {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: #555;
+}
+
+.d365-odata-relationship {
+  max-width: 300px;
+}
+
+.d365-odata-relationship .d365-odata-truncated {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #8b4513;
+  font-size: 12px;
+}
+
+.d365-odata-target {
+  font-family: 'Consolas', 'Courier New', monospace;
+  color: #107c10;
+  font-size: 12px;
+}
+
+@media (max-width: 1024px) {
+  .d365-odata-modal {
+    width: 96%;
+  }
+
+  .d365-odata-table {
+    font-size: 12px;
+  }
+
+  .d365-odata-table th,
+  .d365-odata-table td {
+    padding: 8px 10px;
   }
 }

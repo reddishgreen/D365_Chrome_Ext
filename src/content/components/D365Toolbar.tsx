@@ -4,10 +4,12 @@ import { restoreShellContainerLayout, setShellContainerOffset } from '../utils/s
 import FormLibrariesAnalyzer from './FormLibrariesAnalyzer';
 import PluginTraceLogViewer, { PluginTraceLogData } from './PluginTraceLogViewer';
 import OptionSetsViewer, { OptionSetsData } from './OptionSetsViewer';
+import ODataFieldsViewer, { ODataFieldsData } from './ODataFieldsViewer';
 
 const D365Toolbar: React.FC = () => {
-  const [isMinimized, setIsMinimized] = useState(false);
   const [showSchemaNames, setShowSchemaNames] = useState(false);
+  const [allFieldsVisible, setAllFieldsVisible] = useState(false);
+  const [allSectionsVisible, setAllSectionsVisible] = useState(false);
   const [notification, setNotification] = useState<string>('');
   const [showLibraries, setShowLibraries] = useState(false);
   const [librariesData, setLibrariesData] = useState<any>(null);
@@ -15,6 +17,11 @@ const D365Toolbar: React.FC = () => {
   const [traceLogData, setTraceLogData] = useState<PluginTraceLogData | null>(null);
   const [showOptionSets, setShowOptionSets] = useState(false);
   const [optionSetData, setOptionSetData] = useState<OptionSetsData | null>(null);
+  const [showODataFields, setShowODataFields] = useState(false);
+  const [odataFieldsData, setODataFieldsData] = useState<ODataFieldsData | null>(null);
+  const [notificationDuration, setNotificationDuration] = useState(3);
+  const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('top');
+  const showSchemaNamesRef = useRef(showSchemaNames);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const helperRef = useRef<D365Helper | null>(null);
 
@@ -24,11 +31,23 @@ const D365Toolbar: React.FC = () => {
   }
   const helper = helperRef.current;
 
+  // Load settings
+  useEffect(() => {
+    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition'], (result) => {
+      if (result.notificationDuration !== undefined) {
+        setNotificationDuration(result.notificationDuration);
+      }
+      if (result.toolbarPosition !== undefined) {
+        setToolbarPosition(result.toolbarPosition);
+      }
+    });
+  }, []);
+
   const updateShellOffset = useCallback(() => {
     const toolbarHeight = toolbarRef.current?.getBoundingClientRect().height;
-    const fallbackHeight = isMinimized ? 35 : 70;
-    setShellContainerOffset(Math.round(toolbarHeight ?? fallbackHeight));
-  }, [isMinimized]);
+    const fallbackHeight = 70;
+    setShellContainerOffset(Math.round(toolbarHeight ?? fallbackHeight), toolbarPosition);
+  }, [toolbarPosition]);
 
   useEffect(() => {
     updateShellOffset();
@@ -50,26 +69,106 @@ const D365Toolbar: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    showSchemaNamesRef.current = showSchemaNames;
+  }, [showSchemaNames]);
+
+  useEffect(() => {
+    const { history } = window;
+    let lastUrl = window.location.href;
+
+    const resetSchemaOverlay = () => {
+      if (!showSchemaNamesRef.current) {
+        return;
+      }
+
+      showSchemaNamesRef.current = false;
+      setShowSchemaNames(false);
+      helper.toggleSchemaOverlay(false).catch((error) => {
+        console.warn('D365 Helper: Failed to reset schema overlays after navigation', error);
+      });
+    };
+
+    const handlePotentialNavigation = () => {
+      const currentUrl = window.location.href;
+      if (currentUrl !== lastUrl) {
+        lastUrl = currentUrl;
+        resetSchemaOverlay();
+      }
+    };
+
+    const intervalId = window.setInterval(handlePotentialNavigation, 1000);
+
+    window.addEventListener('popstate', handlePotentialNavigation);
+    window.addEventListener('hashchange', handlePotentialNavigation);
+
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    const patchedPushState: History['pushState'] = function (
+      this: History,
+      data: any,
+      unused: string,
+      url?: string | URL | null
+    ) {
+      const unusedParam = typeof unused === 'string' ? unused : '';
+      const result = originalPushState.call(this, data, unusedParam, url);
+      handlePotentialNavigation();
+      return result;
+    };
+
+    const patchedReplaceState: History['replaceState'] = function (
+      this: History,
+      data: any,
+      unused: string,
+      url?: string | URL | null
+    ) {
+      const unusedParam = typeof unused === 'string' ? unused : '';
+      const result = originalReplaceState.call(this, data, unusedParam, url);
+      handlePotentialNavigation();
+      return result;
+    };
+
+    history.pushState = patchedPushState;
+    history.replaceState = patchedReplaceState;
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('popstate', handlePotentialNavigation);
+      window.removeEventListener('hashchange', handlePotentialNavigation);
+      history.pushState = originalPushState;
+      history.replaceState = originalReplaceState;
+    };
+  }, [helper]);
+
   const showNotification = (message: string) => {
     setNotification(message);
-    setTimeout(() => setNotification(''), 3000);
+    setTimeout(() => setNotification(''), notificationDuration * 1000);
   };
 
-  const handleToggleFields = async (show: boolean) => {
+  const handleToggleFields = async () => {
+    const newState = !allFieldsVisible;
+    setAllFieldsVisible(newState);
     try {
-      await helper.toggleAllFields(show);
-      showNotification(show ? 'All fields shown' : 'All fields hidden');
-    } catch (error) {
-      showNotification('Error toggling fields');
+      await helper.toggleAllFields(newState);
+      showNotification(newState ? 'All fields shown' : 'Fields restored to original state');
+    } catch (error: any) {
+      setAllFieldsVisible(!newState); // Revert state on error
+      const message = error?.message || 'Error toggling fields';
+      showNotification(message);
     }
   };
 
-  const handleToggleSections = async (show: boolean) => {
+  const handleToggleSections = async () => {
+    const newState = !allSectionsVisible;
+    setAllSectionsVisible(newState);
     try {
-      await helper.toggleAllSections(show);
-      showNotification(show ? 'All sections shown' : 'All sections hidden');
-    } catch (error) {
-      showNotification('Error toggling sections');
+      await helper.toggleAllSections(newState);
+      showNotification(newState ? 'All sections shown' : 'Sections restored to original state');
+    } catch (error: any) {
+      setAllSectionsVisible(!newState); // Revert state on error
+      const message = error?.message || 'Error toggling sections';
+      showNotification(message);
     }
   };
 
@@ -226,6 +325,41 @@ const D365Toolbar: React.FC = () => {
     setOptionSetData(null);
   };
 
+  const loadODataFields = async (openModal: boolean = false) => {
+    try {
+      showNotification('Loading OData fields...');
+      const data = await helper.getODataFields();
+      setODataFieldsData(data);
+      if (openModal) {
+        setShowODataFields(true);
+      }
+      showNotification('');
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Error loading OData fields';
+      setODataFieldsData({
+        entityName: '',
+        entitySetName: '',
+        fields: [],
+        error: message
+      });
+      setShowODataFields(true);
+      showNotification('Error loading OData fields');
+    }
+  };
+
+  const handleShowODataFields = async () => {
+    await loadODataFields(true);
+  };
+
+  const handleRefreshODataFields = async () => {
+    await loadODataFields(false);
+  };
+
+  const handleCloseODataFields = () => {
+    setShowODataFields(false);
+    setODataFieldsData(null);
+  };
+
   const handleUnlockFields = async () => {
     try {
       const count = await helper.unlockFields();
@@ -249,6 +383,8 @@ const D365Toolbar: React.FC = () => {
       showNotification('Activating Developer Mode...');
       await helper.toggleAllFields(true);
       await helper.toggleAllSections(true);
+      setAllFieldsVisible(true);
+      setAllSectionsVisible(true);
       const unlocked = await helper.unlockFields();
       const disabled = await helper.disableFieldRequirements();
       showNotification(`Dev Mode: enabled ${unlocked} fields and ${disabled} controls for testing.`);
@@ -280,67 +416,47 @@ const D365Toolbar: React.FC = () => {
     location.reload();
   };
 
-  if (isMinimized) {
-    return (
-      <div ref={toolbarRef} className="d365-toolbar d365-toolbar-minimized">
-        <button
-          className="d365-toolbar-btn d365-toolbar-maximize"
-          onClick={() => setIsMinimized(false)}
-          title="Show D365 Helper"
-        >
-          ⚡ D365 Helper
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div ref={toolbarRef} className="d365-toolbar">
+    <div ref={toolbarRef} className={`d365-toolbar d365-toolbar-${toolbarPosition}`}>
       <div className="d365-toolbar-content">
         <div className="d365-toolbar-logo-section">
-          <img
-            className="d365-toolbar-logo"
-            src={chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg')}
-            alt="RG Logo"
-            onError={(e) => {
-              console.error('Logo failed to load:', chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg'));
-              e.currentTarget.style.display = 'none';
-            }}
-          />
+          <a
+            href="https://www.reddishgreen.co.uk"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: 'inline-block', lineHeight: 0 }}
+          >
+            <img
+              className="d365-toolbar-logo"
+              src={chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg')}
+              alt="RG Logo"
+              onError={(e) => {
+                console.error('Logo failed to load:', chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg'));
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          </a>
         </div>
+
         <div className="d365-toolbar-section">
           <span className="d365-toolbar-section-label">Fields:</span>
           <button
-            className="d365-toolbar-btn"
-            onClick={() => handleToggleFields(true)}
-            title="Show all fields on the form"
+            className={`d365-toolbar-btn ${allFieldsVisible ? 'd365-toolbar-btn-active' : ''}`}
+            onClick={handleToggleFields}
+            title="Toggle visibility of all fields on the form"
           >
-            Show All
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={() => handleToggleFields(false)}
-            title="Hide all fields on the form"
-          >
-            Hide All
+            {allFieldsVisible ? 'Hide All' : 'Show All'}
           </button>
         </div>
 
         <div className="d365-toolbar-section">
           <span className="d365-toolbar-section-label">Sections:</span>
           <button
-            className="d365-toolbar-btn"
-            onClick={() => handleToggleSections(true)}
-            title="Show all sections on the form"
+            className={`d365-toolbar-btn ${allSectionsVisible ? 'd365-toolbar-btn-active' : ''}`}
+            onClick={handleToggleSections}
+            title="Toggle visibility of all sections on the form"
           >
-            Show All
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={() => handleToggleSections(false)}
-            title="Hide all sections on the form"
-          >
-            Hide All
+            {allSectionsVisible ? 'Hide All' : 'Show All'}
           </button>
         </div>
 
@@ -449,6 +565,17 @@ const D365Toolbar: React.FC = () => {
           >
             Option Sets
           </button>
+          <button
+            className="d365-toolbar-btn"
+            onClick={handleShowODataFields}
+            title="View OData field metadata for this entity"
+          >
+            OData Fields
+          </button>
+        </div>
+
+        <div className="d365-toolbar-section d365-toolbar-actions">
+          <span className="d365-toolbar-version-badge">v{chrome.runtime.getManifest().version}</span>
         </div>
       </div>
 
@@ -480,8 +607,17 @@ const D365Toolbar: React.FC = () => {
           onRefresh={handleRefreshOptionSets}
         />
       )}
+
+      {showODataFields && (
+        <ODataFieldsViewer
+          data={odataFieldsData}
+          onClose={handleCloseODataFields}
+          onRefresh={handleRefreshODataFields}
+        />
+      )}
     </div>
   );
 };
 
 export default D365Toolbar;
+

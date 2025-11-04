@@ -1,6 +1,10 @@
 // This script runs in the page context and has access to window.Xrm
 // It communicates with the content script via custom events
 
+// Store original visibility states
+const originalFieldVisibility = new Map<string, boolean>();
+const originalSectionVisibility = new Map<string, boolean>();
+
 // Listen for requests from content script
 window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
   const { action, data, requestId } = event.detail;
@@ -18,10 +22,16 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
 
     switch (action) {
       case 'GET_RECORD_ID':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
         result = Xrm.Page.data.entity.getId().replace(/[{}]/g, '');
         break;
 
       case 'GET_ENTITY_NAME':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
         result = Xrm.Page.data.entity.getEntityName();
         break;
 
@@ -35,28 +45,83 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         break;
 
       case 'TOGGLE_FIELDS':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
+
         const attributes = Xrm.Page.data.entity.attributes.get();
-        attributes.forEach((attribute: any) => {
-          const controls = attribute.controls.get();
-          controls.forEach((control: any) => {
-            control.setVisible(data.show);
+
+        if (data.show) {
+          // Clear any existing saved states and save current state before showing all
+          originalFieldVisibility.clear();
+          attributes.forEach((attribute: any) => {
+            const controls = attribute.controls.get();
+            controls.forEach((control: any) => {
+              const controlName = control.getName();
+              originalFieldVisibility.set(controlName, control.getVisible());
+              control.setVisible(true);
+            });
           });
-        });
+        } else {
+          // Restore original visibility state
+          attributes.forEach((attribute: any) => {
+            const controls = attribute.controls.get();
+            controls.forEach((control: any) => {
+              const controlName = control.getName();
+              const originalState = originalFieldVisibility.get(controlName);
+              if (originalState !== undefined) {
+                control.setVisible(originalState);
+              }
+            });
+          });
+          // Clear the saved states after restoration
+          originalFieldVisibility.clear();
+        }
+
         result = { success: true };
         break;
 
       case 'TOGGLE_SECTIONS':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.ui) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
+
         const tabs = Xrm.Page.ui.tabs.get();
-        tabs.forEach((tab: any) => {
-          const sections = tab.sections.get();
-          sections.forEach((section: any) => {
-            section.setVisible(data.show);
+
+        if (data.show) {
+          // Clear any existing saved states and save current state before showing all
+          originalSectionVisibility.clear();
+          tabs.forEach((tab: any) => {
+            const sections = tab.sections.get();
+            sections.forEach((section: any) => {
+              const sectionName = section.getName();
+              originalSectionVisibility.set(sectionName, section.getVisible());
+              section.setVisible(true);
+            });
           });
-        });
+        } else {
+          // Restore original visibility state
+          tabs.forEach((tab: any) => {
+            const sections = tab.sections.get();
+            sections.forEach((section: any) => {
+              const sectionName = section.getName();
+              const originalState = originalSectionVisibility.get(sectionName);
+              if (originalState !== undefined) {
+                section.setVisible(originalState);
+              }
+            });
+          });
+          // Clear the saved states after restoration
+          originalSectionVisibility.clear();
+        }
+
         result = { success: true };
         break;
 
       case 'GET_SCHEMA_NAMES':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
         const attrs = Xrm.Page.data.entity.attributes.get();
         const schemaNames: string[] = [];
         attrs.forEach((attr: any) => {
@@ -66,6 +131,9 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         break;
 
       case 'UNLOCK_FIELDS':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
         const allAttributes = Xrm.Page.data.entity.attributes.get();
         let unlockedCount = 0;
         allAttributes.forEach((attribute: any) => {
@@ -84,6 +152,9 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         break;
 
       case 'AUTO_FILL_FORM':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
         const formAttrs = Xrm.Page.data.entity.attributes.get();
         let filledCount = 0;
         formAttrs.forEach((attr: any) => {
@@ -134,6 +205,9 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         break;
 
       case 'GET_CONTROL_INFO':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
         const allAttrs = Xrm.Page.data.entity.attributes.get();
         const controlInfo: any[] = [];
         allAttrs.forEach((attr: any) => {
@@ -182,6 +256,9 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         break;
 
       case 'DISABLE_REQUIRED_FIELDS':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
         const requiredAttributes = Xrm.Page.data.entity.attributes.get();
         let disabledCount = 0;
         requiredAttributes.forEach((attr: any) => {
@@ -201,6 +278,10 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         break;
 
       case 'GET_OPTION_SETS':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
+
         const optionAttributes = Xrm.Page.data.entity.attributes.get();
         const optionResults: any[] = [];
 
@@ -1107,6 +1188,216 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
           onChange: onChangeHandlers,
           onSave: onSaveHandlers
         };
+        break;
+
+      case 'GET_ODATA_FIELDS':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
+
+        try {
+          console.log('D365 Helper: Starting GET_ODATA_FIELDS...');
+
+          // Get entity name and client URL
+          const entityLogicalName = Xrm.Page.data.entity.getEntityName();
+          const clientUrl = Xrm.Utility.getGlobalContext().getClientUrl();
+
+          console.log('D365 Helper: Entity:', entityLogicalName, 'URL:', clientUrl);
+
+          // Step 1: Fetch basic entity metadata
+          const entityMetadataUrl = `${clientUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${entityLogicalName}')?$select=EntitySetName,SchemaName,LogicalName`;
+
+          console.log('D365 Helper: Fetching entity metadata from:', entityMetadataUrl);
+
+          const entityResponse = await fetch(entityMetadataUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'OData-MaxVersion': '4.0',
+              'OData-Version': '4.0'
+            },
+            credentials: 'include'
+          });
+
+          console.log('D365 Helper: Entity metadata response status:', entityResponse.status);
+
+          if (!entityResponse.ok) {
+            const errorText = await entityResponse.text();
+            console.error('D365 Helper: Entity metadata error:', errorText);
+            throw new Error(`Failed to fetch entity metadata: ${entityResponse.statusText}`);
+          }
+
+          const entityMetadataResult = await entityResponse.json();
+          const entitySetName = entityMetadataResult.EntitySetName;
+          const entitySchemaName = entityMetadataResult.SchemaName;
+
+          console.log('D365 Helper: Entity metadata success. EntitySetName:', entitySetName);
+
+          // Step 2: Fetch attributes separately
+          const attributesUrl = `${clientUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes?$select=LogicalName,SchemaName,AttributeType`;
+
+          const attributesResponse = await fetch(attributesUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'OData-MaxVersion': '4.0',
+              'OData-Version': '4.0'
+            },
+            credentials: 'include'
+          });
+
+          if (!attributesResponse.ok) {
+            const errorText = await attributesResponse.text();
+            console.error('D365 Helper: Attributes error:', errorText);
+            throw new Error(`Failed to fetch attributes: ${attributesResponse.statusText}`);
+          }
+
+          const attributesData = await attributesResponse.json();
+          const attributes = attributesData.value || [];
+
+          console.log('D365 Helper: Fetched', attributes.length, 'attributes');
+
+          // Step 3: Fetch relationship metadata for lookups
+          const relationshipsUrl = `${clientUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${entityLogicalName}')/ManyToOneRelationships?$select=SchemaName,ReferencedEntity,ReferencingEntity,ReferencingAttribute`;
+
+          const relationshipsResponse = await fetch(relationshipsUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'OData-MaxVersion': '4.0',
+              'OData-Version': '4.0'
+            },
+            credentials: 'include'
+          });
+
+          let relationshipsMap = new Map<string, any>();
+          if (relationshipsResponse.ok) {
+            const relationshipsData = await relationshipsResponse.json();
+            const relationships = relationshipsData.value || [];
+
+            console.log('D365 Helper: Fetched', relationships.length, 'ManyToOne relationships');
+
+            // Map relationships by ReferencingAttribute (which is the lookup field logical name)
+            relationships.forEach((rel: any) => {
+              if (rel.ReferencingAttribute) {
+                relationshipsMap.set(rel.ReferencingAttribute, {
+                  schemaName: rel.SchemaName,
+                  referencedEntity: rel.ReferencedEntity,
+                  referencingEntity: rel.ReferencingEntity
+                });
+              }
+            });
+          } else {
+            console.log('D365 Helper: Could not fetch relationships, continuing without them');
+          }
+
+          // Create a map of attributes from the form to get option set values and targets
+          const formAttributesMap = new Map<string, any>();
+          const formAttributes = Xrm.Page.data.entity.attributes.get();
+          formAttributes.forEach((attr: any) => {
+            try {
+              const logicalName = attr.getName();
+              const attributeType = attr.getAttributeType();
+
+              const attrData: any = {
+                type: attributeType
+              };
+
+              // Get option set values for picklists
+              if (['optionset', 'multioptionset', 'boolean'].includes(attributeType) && typeof attr.getOptions === 'function') {
+                const options = attr.getOptions() || [];
+                attrData.options = options.map((opt: any) => ({
+                  value: opt.value,
+                  label: opt.text || opt.label || ''
+                }));
+              }
+
+              formAttributesMap.set(logicalName, attrData);
+            } catch (e) {
+              // Skip attributes that can't be accessed
+            }
+          });
+
+          // Now fetch detailed metadata for lookups and option sets
+          // We'll make individual calls for each attribute type we're interested in
+          const lookupFieldsUrl = `${clientUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=LogicalName,Targets`;
+          let lookupTargets = new Map<string, string[]>();
+
+          try {
+            const lookupResponse = await fetch(lookupFieldsUrl, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'OData-MaxVersion': '4.0',
+                'OData-Version': '4.0'
+              },
+              credentials: 'include'
+            });
+
+            if (lookupResponse.ok) {
+              const lookupData = await lookupResponse.json();
+              (lookupData.value || []).forEach((lookup: any) => {
+                if (lookup.Targets && lookup.Targets.length > 0) {
+                  lookupTargets.set(lookup.LogicalName, lookup.Targets);
+                }
+              });
+            }
+          } catch (e) {
+            console.log('D365 Helper: Could not fetch lookup targets:', e);
+          }
+
+          // Process attributes to extract OData-relevant information
+          const odataFields: any[] = [];
+
+          attributes.forEach((attr: any) => {
+            const field: any = {
+              logicalName: attr.LogicalName,
+              schemaName: attr.SchemaName,
+              attributeType: attr.AttributeType
+            };
+
+            // Add OData bind for lookups
+            if (attr.AttributeType === 'Lookup' || attr.AttributeType === 'Customer' || attr.AttributeType === 'Owner') {
+              field.odataBind = '@odata.bind';
+
+              // Get relationship information for this lookup
+              const relationship = relationshipsMap.get(attr.LogicalName);
+              if (relationship) {
+                field.relationshipName = relationship.schemaName;
+                field.targetEntity = relationship.referencedEntity;
+              } else {
+                // Fallback: try to get target from our lookup targets map
+                const targets = lookupTargets.get(attr.LogicalName);
+                if (targets && targets.length > 0) {
+                  field.targetEntity = targets.join(', ');
+                }
+              }
+            }
+
+            // Get option set values from form attributes (more reliable than API)
+            const formAttr = formAttributesMap.get(attr.LogicalName);
+            if (formAttr && formAttr.options && formAttr.options.length > 0) {
+              field.optionSetValues = formAttr.options
+                .map((opt: any) => `${opt.value}-${opt.label}`)
+                .join(', ');
+            }
+
+            odataFields.push(field);
+          });
+
+          // Sort fields by logical name
+          odataFields.sort((a, b) => a.logicalName.localeCompare(b.logicalName));
+
+          result = {
+            entityName: entityLogicalName,
+            entitySchemaName: entitySchemaName,
+            entitySetName: entitySetName,
+            fields: odataFields
+          };
+        } catch (error: any) {
+          console.error('D365 Helper: Error fetching OData fields:', error);
+          throw new Error(`Failed to fetch OData fields: ${error.message}`);
+        }
         break;
 
       case 'GET_PLUGIN_TRACE_LOGS':

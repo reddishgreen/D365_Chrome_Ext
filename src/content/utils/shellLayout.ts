@@ -20,17 +20,28 @@ const parsePixelValue = (value: string | undefined): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-export const setShellContainerOffset = (offset: number): void => {
+export const setShellContainerOffset = (offset: number, position: 'top' | 'bottom' = 'top'): void => {
   const shellContainer = document.getElementById('shell-container') as HTMLElement | null;
   if (!shellContainer) {
     return;
   }
 
-  const originalTop = ensureOriginalTop(shellContainer);
-  const numericTop = parsePixelValue(originalTop);
+  if (position === 'top') {
+    const originalTop = ensureOriginalTop(shellContainer);
+    const numericTop = parsePixelValue(originalTop);
 
-  shellContainer.style.marginTop = '';
-  shellContainer.style.top = `${numericTop + offset}px`;
+    shellContainer.style.marginTop = '';
+    shellContainer.style.paddingBottom = '';
+    shellContainer.style.marginBottom = '';
+    shellContainer.style.bottom = '';
+    shellContainer.style.top = `${numericTop + offset}px`;
+  } else {
+    // For bottom position, reduce the height by adding bottom margin
+    shellContainer.style.top = '';
+    shellContainer.style.marginTop = '';
+    shellContainer.style.paddingBottom = '';
+    shellContainer.style.marginBottom = `${offset}px`;
+  }
 };
 
 export const restoreShellContainerLayout = (): void => {
@@ -51,5 +62,8 @@ export const restoreShellContainerLayout = (): void => {
   }
 
   shellContainer.style.marginTop = '';
+  shellContainer.style.paddingBottom = '';
+  shellContainer.style.marginBottom = '';
+  shellContainer.style.bottom = '';
   delete dataset.d365HelperOriginalTop;
 };
