@@ -524,6 +524,20 @@
   color: #0078d4;
 }
 
+/* Blur fields feature for privacy */
+.d365-helper-blur-field {
+  filter: blur(5px);
+  transition: filter 0.3s ease;
+}
+
+.d365-helper-blur-field:hover {
+  filter: blur(2px);
+}
+
+.d365-helper-blur-field:focus {
+  filter: none;
+}
+
 @media (max-width: 1200px) {
   .d365-toolbar-content {
     gap: 6px;
@@ -1302,10 +1316,10 @@
 }
 
 .d365-odata-table thead {
-  background: #f2f4f7;
+  background: #f8f9fa;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 10;
 }
 
 .d365-odata-table th {

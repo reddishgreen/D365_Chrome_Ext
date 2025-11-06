@@ -2,8 +2,10 @@
 // It communicates with the content script via custom events
 
 // Store original visibility states
+// Separate maps for TOGGLE_FIELDS and TOGGLE_SECTIONS to avoid conflicts
 const originalFieldVisibility = new Map<string, boolean>();
-const originalSectionVisibility = new Map<string, boolean>();
+const originalSectionVisibilityForFields = new Map<string, boolean>(); // Used by TOGGLE_FIELDS
+const originalSectionVisibilityForSections = new Map<string, boolean>(); // Used by TOGGLE_SECTIONS
 
 // Listen for requests from content script
 window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
@@ -54,16 +56,84 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         if (data.show) {
           // Clear any existing saved states and save current state before showing all
           originalFieldVisibility.clear();
+          originalSectionVisibilityForFields.clear();
+
+          // Build a control-to-section visibility map upfront
+          // This maps each control name to its parent section's visibility state
+          const controlSectionVisibility = new Map();
+          const tabs = Xrm.Page.ui.tabs.get();
+
+          console.log('D365 Helper: Building control-to-section visibility map...');
+
+          // First pass: Save section visibility and build control-to-section map
+          tabs.forEach((tab: any) => {
+            const sections = tab.sections.get();
+            sections.forEach((section: any) => {
+              const sectionName = section.getName();
+              const sectionVisible = section.getVisible();
+
+              // Save original section visibility
+              originalSectionVisibilityForFields.set(sectionName, sectionVisible);
+              console.debug('D365 Helper: Saved section', sectionName, 'visibility:', sectionVisible);
+
+              try {
+                const sectionControls = section.controls.get();
+                sectionControls.forEach((control: any) => {
+                  const controlName = control.getName();
+                  controlSectionVisibility.set(controlName, sectionVisible);
+                  console.debug('D365 Helper: Mapped control', controlName, 'to section', sectionName, 'visible:', sectionVisible);
+                });
+              } catch (e) {
+                console.debug('D365 Helper: Error getting controls for section', sectionName, e);
+              }
+
+              // Show all sections
+              section.setVisible(true);
+            });
+          });
+
+          console.log('D365 Helper: Saved', originalSectionVisibilityForFields.size, 'section states');
+          console.log('D365 Helper: Control-section map built with', controlSectionVisibility.size, 'entries');
+
+          // Second pass: Save field visibility states considering section visibility
           attributes.forEach((attribute: any) => {
             const controls = attribute.controls.get();
             controls.forEach((control: any) => {
               const controlName = control.getName();
-              originalFieldVisibility.set(controlName, control.getVisible());
+              let actuallyVisible = control.getVisible();
+
+              // Check if this control's parent section is hidden
+              const sectionVisible = controlSectionVisibility.get(controlName);
+              if (sectionVisible !== undefined) {
+                // Field is only actually visible if both field AND section are visible
+                actuallyVisible = actuallyVisible && sectionVisible;
+                console.debug('D365 Helper: Control', controlName, 'field visible:', control.getVisible(), 'section visible:', sectionVisible, 'actual visible:', actuallyVisible);
+              } else {
+                console.debug('D365 Helper: Control', controlName, 'not found in section map, using field visibility only');
+              }
+
+              originalFieldVisibility.set(controlName, actuallyVisible);
               control.setVisible(true);
             });
           });
+
+          console.log('D365 Helper: Saved visibility state for', originalFieldVisibility.size, 'controls');
         } else {
-          // Restore original visibility state
+          // Restore original section visibility first
+          const tabs = Xrm.Page.ui.tabs.get();
+          tabs.forEach((tab: any) => {
+            const sections = tab.sections.get();
+            sections.forEach((section: any) => {
+              const sectionName = section.getName();
+              const originalState = originalSectionVisibilityForFields.get(sectionName);
+              if (originalState !== undefined) {
+                section.setVisible(originalState);
+                console.debug('D365 Helper: Restored section', sectionName, 'to visibility:', originalState);
+              }
+            });
+          });
+
+          // Then restore field visibility
           attributes.forEach((attribute: any) => {
             const controls = attribute.controls.get();
             controls.forEach((control: any) => {
@@ -74,8 +144,10 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
               }
             });
           });
+
           // Clear the saved states after restoration
           originalFieldVisibility.clear();
+          originalSectionVisibilityForFields.clear();
         }
 
         result = { success: true };
@@ -90,29 +162,33 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
 
         if (data.show) {
           // Clear any existing saved states and save current state before showing all
-          originalSectionVisibility.clear();
+          originalSectionVisibilityForSections.clear();
           tabs.forEach((tab: any) => {
             const sections = tab.sections.get();
             sections.forEach((section: any) => {
               const sectionName = section.getName();
-              originalSectionVisibility.set(sectionName, section.getVisible());
+              originalSectionVisibilityForSections.set(sectionName, section.getVisible());
+              console.debug('D365 Helper: [TOGGLE_SECTIONS] Saved section', sectionName, 'visibility:', section.getVisible());
               section.setVisible(true);
             });
           });
+          console.log('D365 Helper: [TOGGLE_SECTIONS] Saved', originalSectionVisibilityForSections.size, 'section states');
         } else {
           // Restore original visibility state
           tabs.forEach((tab: any) => {
             const sections = tab.sections.get();
             sections.forEach((section: any) => {
               const sectionName = section.getName();
-              const originalState = originalSectionVisibility.get(sectionName);
+              const originalState = originalSectionVisibilityForSections.get(sectionName);
               if (originalState !== undefined) {
                 section.setVisible(originalState);
+                console.debug('D365 Helper: [TOGGLE_SECTIONS] Restored section', sectionName, 'to visibility:', originalState);
               }
             });
           });
           // Clear the saved states after restoration
-          originalSectionVisibility.clear();
+          originalSectionVisibilityForSections.clear();
+          console.log('D365 Helper: [TOGGLE_SECTIONS] Restored and cleared section states');
         }
 
         result = { success: true };
@@ -128,6 +204,121 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
           schemaNames.push(attr.getName());
         });
         result = schemaNames.sort();
+        break;
+
+      case 'TOGGLE_BLUR_FIELDS':
+        if (!Xrm || !Xrm.Page || !Xrm.Page.data || !Xrm.Page.data.entity) {
+          throw new Error('Form not fully loaded. Please wait for the form to finish loading.');
+        }
+
+        const blurClass = 'd365-helper-blur-field';
+
+        if (data.blur) {
+          // Add blur effect to all input fields
+          const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="url"], input[type="tel"], input[type="number"], textarea, select, [role="combobox"], [role="textbox"]');
+          inputs.forEach((input: Element) => {
+            (input as HTMLElement).classList.add(blurClass);
+          });
+
+          // Blur lookup values - use multiple strategies
+          let lookupCount = 0;
+
+          // Strategy 1: Use Xrm to find lookup fields and blur their displayed values
+          const attributes = Xrm.Page.data.entity.attributes.get();
+          attributes.forEach((attr: any) => {
+            if (attr.getAttributeType() === 'lookup') {
+              const controls = attr.controls.get();
+              controls.forEach((control: any) => {
+                try {
+                  const controlName = control.getName();
+                  console.log('D365 Helper: Processing lookup control:', controlName);
+
+                  // Try multiple selectors to find the control container
+                  let controlContainer = document.querySelector(`[data-id="${controlName}"]`);
+                  if (!controlContainer) {
+                    controlContainer = document.querySelector(`[id="${controlName}"]`);
+                  }
+                  if (!controlContainer) {
+                    controlContainer = document.querySelector(`[data-control-name="${controlName}"]`);
+                  }
+
+                  if (controlContainer) {
+                    console.log('D365 Helper: Found container for', controlName);
+
+                    // Strategy A: Try to blur anchor tags first (standard lookups)
+                    const lookupLinks = controlContainer.querySelectorAll('a');
+                    console.log('D365 Helper: Found', lookupLinks.length, 'anchor tags in', controlName);
+
+                    lookupLinks.forEach((link: Element) => {
+                      const linkEl = link as HTMLElement;
+                      if (linkEl.textContent && linkEl.textContent.trim().length > 0) {
+                        if (!linkEl.classList.contains(blurClass)) {
+                          linkEl.classList.add(blurClass);
+                          lookupCount++;
+                          console.log('D365 Helper: Blurred link:', linkEl.textContent.trim());
+                        }
+                      }
+                    });
+
+                    // Strategy B: If no anchor tags found, blur specific lookup value containers
+                    // Look for elements with specific lookup-related attributes or classes
+                    if (lookupLinks.length === 0) {
+                      console.log('D365 Helper: No anchor tags found, trying alternative selectors for', controlName);
+
+                      // Try to find elements with lookup-specific attributes
+                      const lookupElements = controlContainer.querySelectorAll(
+                        '[data-lp-id], [aria-label*="Lookup"], button[aria-label], [role="button"]'
+                      );
+                      console.log('D365 Helper: Found', lookupElements.length, 'potential lookup elements in', controlName);
+
+                      lookupElements.forEach((el: Element) => {
+                        const element = el as HTMLElement;
+                        // Get the text content
+                        const text = element.textContent?.trim() || '';
+                        // Skip if it's just a label or empty
+                        if (text.length > 0 && !text.match(/^[A-Z][a-z]+:?$/)) {
+                          if (!element.classList.contains(blurClass)) {
+                            element.classList.add(blurClass);
+                            lookupCount++;
+                            console.log('D365 Helper: Blurred lookup element:', text);
+                          }
+                        }
+                      });
+                    }
+                  } else {
+                    console.log('D365 Helper: Could not find container for', controlName);
+                  }
+                } catch (e) {
+                  console.log('D365 Helper: Error processing control:', e);
+                }
+              });
+            }
+          });
+
+          // Strategy 2: Also blur any anchor tags within elements that have data-lp-id or are lookup containers
+          // This catches lookups that might not be found via Xrm
+          const allLookupLinks = document.querySelectorAll('[data-lp-id] a, [class*="lookup"] a, [class*="Lookup"] a');
+          console.log('D365 Helper: Found', allLookupLinks.length, 'additional lookup links');
+
+          allLookupLinks.forEach((link: Element) => {
+            const linkEl = link as HTMLElement;
+            if (linkEl.textContent && linkEl.textContent.trim().length > 0 && !linkEl.classList.contains(blurClass)) {
+              linkEl.classList.add(blurClass);
+              console.log('D365 Helper: Blurred additional link:', linkEl.textContent.trim());
+            }
+          });
+
+          console.log('D365 Helper: Blurred', inputs.length, 'inputs and', lookupCount, 'lookup elements');
+        } else {
+          // Remove blur effect
+          const blurredElements = document.querySelectorAll(`.${blurClass}`);
+          blurredElements.forEach((element: Element) => {
+            (element as HTMLElement).classList.remove(blurClass);
+          });
+          console.log('D365 Helper: Removed blur from', blurredElements.length, 'elements');
+        }
+
+        result = { success: true };
         break;
 
       case 'UNLOCK_FIELDS':
@@ -160,15 +351,34 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         formAttrs.forEach((attr: any) => {
           try {
             const attrType = attr.getAttributeType();
+            const attrName = attr.getName().toLowerCase();
             const currentValue = attr.getValue();
 
             // Only fill if empty
-            if (currentValue === null || currentValue === undefined || currentValue === '') {
+            if (currentValue === null || currentValue === undefined || currentValue === '' || (Array.isArray(currentValue) && currentValue.length === 0)) {
               switch (attrType) {
                 case 'string':
                 case 'memo':
-                  attr.setValue('Sample Text');
-                  filledCount++;
+                  // Check if it's an email field
+                  if (attrName.includes('email') || attrName.includes('emailaddress')) {
+                    attr.setValue('test@example.com');
+                    filledCount++;
+                  }
+                  // Check if it's a URL field
+                  else if (attrName.includes('url') || attrName.includes('website') || attrName.includes('web')) {
+                    attr.setValue('https://www.example.com');
+                    filledCount++;
+                  }
+                  // Check if it's a phone number field
+                  else if (attrName.includes('phone') || attrName.includes('telephone') || attrName.includes('mobile')) {
+                    attr.setValue('555-0100');
+                    filledCount++;
+                  }
+                  // Default text
+                  else {
+                    attr.setValue('Sample Text');
+                    filledCount++;
+                  }
                   break;
                 case 'integer':
                   attr.setValue(100);
@@ -195,10 +405,16 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
                     filledCount++;
                   }
                   break;
+                case 'lookup':
+                  // Lookups require special handling - we can't just set a random value
+                  // Skip lookups for now as they need actual entity references
+                  console.debug('D365 Helper: Skipping lookup field', attrName, '- requires actual entity reference');
+                  break;
               }
             }
           } catch (e) {
             // Skip fields that can't be filled
+            console.debug('D365 Helper: Could not fill field:', e);
           }
         });
         result = { filledCount };
@@ -1487,6 +1703,166 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
 
           result = {
             logs: [],
+            error: errorMessage
+          };
+        }
+        break;
+
+      case 'GET_AUDIT_HISTORY':
+        if (!Xrm || !Xrm.WebApi || typeof Xrm.WebApi.retrieveMultipleRecords !== 'function') {
+          result = {
+            records: [],
+            error: 'Xrm.WebApi not available. Make sure you are in the Dynamics 365 app.'
+          };
+          break;
+        }
+
+        try {
+          // Get current record ID and entity name
+          const recordId = Xrm.Page.data.entity.getId().replace(/[{}]/g, '');
+          const entityName = Xrm.Page.data.entity.getEntityName();
+          const recordName = Xrm.Page.getAttribute('name')?.getValue() ||
+                           Xrm.Page.data.entity.getPrimaryAttributeValue() ||
+                           'Current Record';
+
+          console.log('D365 Helper: Fetching audit history for', entityName, recordId);
+
+          // Query audit records for this specific record
+          // Use simple filter without expand to avoid property errors
+          const query = `?$filter=_objectid_value eq ${recordId}&$orderby=createdon desc&$top=200`;
+
+          console.log('D365 Helper: Query:', query);
+          console.log('D365 Helper: Full URL would be: /api/data/v9.2/audits' + query);
+
+          const auditResponse = await Xrm.WebApi.retrieveMultipleRecords('audit', query);
+
+          console.log('D365 Helper: Retrieved', auditResponse.entities.length, 'audit records');
+          if (auditResponse.entities.length > 0) {
+            console.log('D365 Helper: First audit record sample:', auditResponse.entities[0]);
+          }
+
+          const auditRecords: any[] = [];
+
+          // Process each audit record
+          for (const audit of auditResponse.entities) {
+            try {
+              const auditId = audit.auditid;
+              console.log('D365 Helper: Processing audit record', auditId, 'action:', audit.action);
+
+              const actionMap: any = {
+                1: 'Create',
+                2: 'Update',
+                3: 'Delete',
+                4: 'Assign',
+                5: 'Share',
+                6: 'Unshare'
+              };
+
+              const actionName = actionMap[audit.action] || `Action ${audit.action}`;
+
+              // Get the user who made the change
+              let changedBy = 'Unknown User';
+              const userId = audit._userid_value;
+              if (userId) {
+                try {
+                  const user = await Xrm.WebApi.retrieveRecord('systemuser', userId, '?$select=fullname');
+                  changedBy = user.fullname || 'Unknown User';
+                } catch (e) {
+                  changedBy = 'Unknown User';
+                }
+              }
+
+              const changedOn = audit.createdon;
+
+              // Try to parse changedata field (newer D365 format)
+              if (audit.changedata) {
+                try {
+                  const changeData = JSON.parse(audit.changedata);
+                  console.log('D365 Helper: Parsed changedata:', changeData);
+
+                  if (changeData.changedAttributes && Array.isArray(changeData.changedAttributes)) {
+                    console.log('D365 Helper: Found', changeData.changedAttributes.length, 'changed attributes');
+
+                    for (const change of changeData.changedAttributes) {
+                      auditRecords.push({
+                        auditId: `${auditId}_${change.logicalName}`,
+                        action: actionName,
+                        fieldName: change.logicalName,
+                        oldValue: change.oldValue?.toString() || '',
+                        newValue: change.newValue?.toString() || '',
+                        changedBy: changedBy,
+                        changedOn: changedOn
+                      });
+                    }
+                  }
+                } catch (parseError) {
+                  console.log('D365 Helper: Could not parse changedata:', parseError);
+                }
+              } else {
+                console.log('D365 Helper: No changedata, adding action record');
+                // No field-level details, just show the action
+                auditRecords.push({
+                  auditId: auditId,
+                  action: actionName,
+                  fieldName: audit.operation ? `Operation: ${audit.operation}` : 'Record',
+                  oldValue: '',
+                  newValue: actionName,
+                  changedBy: changedBy,
+                  changedOn: changedOn
+                });
+              }
+            } catch (recordError: any) {
+              console.warn('D365 Helper: Error processing audit record:', recordError);
+            }
+          }
+
+          // Helper function to format audit values
+          function formatAuditValue(value: any): string {
+            if (value === null || value === undefined) return '';
+            if (typeof value === 'object') {
+              if (value.Name) return value.Name;
+              if (value.Value !== undefined) return String(value.Value);
+              return JSON.stringify(value);
+            }
+            return String(value);
+          }
+
+          console.log('D365 Helper: Returning', auditRecords.length, 'audit records');
+          if (auditRecords.length > 0) {
+            console.log('D365 Helper: Sample audit record:', auditRecords[0]);
+          }
+
+          result = {
+            records: auditRecords,
+            recordName: recordName,
+            entityName: entityName
+          };
+        } catch (error: any) {
+          console.error('D365 Helper: Failed to retrieve audit history', error);
+
+          // Extract meaningful error message
+          let errorMessage = 'Failed to retrieve audit history. Ensure audit logging is enabled and you have permission to read audit records.';
+
+          if (error) {
+            if (typeof error === 'string') {
+              errorMessage = error;
+            } else if (error.message) {
+              errorMessage = error.message;
+            } else if (error.error && error.error.message) {
+              errorMessage = error.error.message;
+            } else if (error.statusText) {
+              errorMessage = `Error: ${error.statusText}`;
+            } else {
+              try {
+                errorMessage = JSON.stringify(error);
+              } catch (e) {
+                errorMessage = 'An unknown error occurred while retrieving audit history.';
+              }
+            }
+          }
+
+          result = {
+            records: [],
             error: errorMessage
           };
         }

@@ -1,0 +1,251 @@
+/* Audit History Overlay */
+.audit-history-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  backdrop-filter: blur(2px);
+}
+
+.audit-history-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  width: 95%;
+  max-width: 1400px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.audit-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 2px solid #e5e5e5;
+  background: white;
+  color: #323130;
+}
+
+.audit-history-title-section h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.audit-history-subtitle {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #605e5c;
+}
+
+.audit-history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.audit-history-refresh-btn,
+.audit-history-close-btn {
+  background: white;
+  border: 1px solid #d0d0d0;
+  color: #323130;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.audit-history-refresh-btn:hover,
+.audit-history-close-btn:hover {
+  background: #f3f2f1;
+  border-color: #0078d4;
+  color: #0078d4;
+}
+
+.audit-history-close-btn {
+  padding: 8px 12px;
+}
+
+.audit-history-filters {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e5e5e5;
+  align-items: center;
+}
+
+.audit-history-search {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.audit-history-search:focus {
+  border-color: #0078d4;
+  box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
+}
+
+.audit-history-filter {
+  padding: 10px 14px;
+  border: 1px solid #d1d1d1;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  outline: none;
+  min-width: 150px;
+}
+
+.audit-history-count {
+  font-size: 14px;
+  color: #666;
+  white-space: nowrap;
+  padding: 0 8px;
+  font-weight: 500;
+}
+
+.audit-history-error,
+.audit-history-no-data {
+  padding: 40px 24px;
+  text-align: center;
+  color: #666;
+}
+
+.audit-history-error {
+  color: #d13438;
+}
+
+.audit-history-table-container {
+  flex: 1;
+  overflow: auto;
+  padding: 0 24px 24px 24px;
+}
+
+.audit-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.audit-history-table thead {
+  position: sticky;
+  top: 0;
+  background: #f8f9fa;
+  z-index: 10;
+}
+
+.audit-history-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #323130;
+  border-bottom: 2px solid #0078d4;
+  white-space: nowrap;
+}
+
+.audit-history-table tbody tr {
+  border-bottom: 1px solid #edebe9;
+  transition: background-color 0.15s ease;
+}
+
+.audit-history-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.audit-history-table td {
+  padding: 14px 16px;
+  vertical-align: top;
+}
+
+.audit-action-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.audit-action-create {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.audit-action-update {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.audit-action-delete {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.audit-field-name {
+  font-weight: 500;
+  color: #0078d4;
+}
+
+.audit-value {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  max-width: 300px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.audit-old-value {
+  color: #666;
+  font-style: italic;
+}
+
+.audit-new-value {
+  color: #000;
+  font-weight: 500;
+}
+
+.audit-user {
+  color: #323130;
+}
+
+.audit-date {
+  color: #666;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .audit-history-container {
+    width: 98%;
+    max-height: 95vh;
+  }
+
+  .audit-history-table {
+    font-size: 13px;
+  }
+
+  .audit-history-table th,
+  .audit-history-table td {
+    padding: 10px 12px;
+  }
+
+  .audit-value {
+    max-width: 200px;
+  }
+}

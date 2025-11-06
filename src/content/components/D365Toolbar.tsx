@@ -5,11 +5,14 @@ import FormLibrariesAnalyzer from './FormLibrariesAnalyzer';
 import PluginTraceLogViewer, { PluginTraceLogData } from './PluginTraceLogViewer';
 import OptionSetsViewer, { OptionSetsData } from './OptionSetsViewer';
 import ODataFieldsViewer, { ODataFieldsData } from './ODataFieldsViewer';
+import AuditHistoryViewer, { AuditHistoryData } from './AuditHistoryViewer';
 
 const D365Toolbar: React.FC = () => {
   const [showSchemaNames, setShowSchemaNames] = useState(false);
   const [allFieldsVisible, setAllFieldsVisible] = useState(false);
   const [allSectionsVisible, setAllSectionsVisible] = useState(false);
+  const [fieldsBlurred, setFieldsBlurred] = useState(false);
+  const [devModeActive, setDevModeActive] = useState(false);
   const [notification, setNotification] = useState<string>('');
   const [showLibraries, setShowLibraries] = useState(false);
   const [librariesData, setLibrariesData] = useState<any>(null);
@@ -19,9 +22,15 @@ const D365Toolbar: React.FC = () => {
   const [optionSetData, setOptionSetData] = useState<OptionSetsData | null>(null);
   const [showODataFields, setShowODataFields] = useState(false);
   const [odataFieldsData, setODataFieldsData] = useState<ODataFieldsData | null>(null);
+  const [showAuditHistory, setShowAuditHistory] = useState(false);
+  const [auditHistoryData, setAuditHistoryData] = useState<AuditHistoryData | null>(null);
   const [notificationDuration, setNotificationDuration] = useState(3);
   const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('top');
+  const [traceLogLimit, setTraceLogLimit] = useState(20);
   const showSchemaNamesRef = useRef(showSchemaNames);
+  const allFieldsVisibleRef = useRef(allFieldsVisible);
+  const allSectionsVisibleRef = useRef(allSectionsVisible);
+  const fieldsBlurredRef = useRef(fieldsBlurred);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const helperRef = useRef<D365Helper | null>(null);
 
@@ -33,14 +42,36 @@ const D365Toolbar: React.FC = () => {
 
   // Load settings
   useEffect(() => {
-    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition'], (result) => {
+    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit'], (result) => {
       if (result.notificationDuration !== undefined) {
         setNotificationDuration(result.notificationDuration);
       }
       if (result.toolbarPosition !== undefined) {
         setToolbarPosition(result.toolbarPosition);
       }
+      if (result.traceLogLimit !== undefined) {
+        setTraceLogLimit(result.traceLogLimit);
+      }
     });
+
+    // Listen for setting changes
+    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.notificationDuration) {
+        setNotificationDuration(changes.notificationDuration.newValue);
+      }
+      if (changes.toolbarPosition) {
+        setToolbarPosition(changes.toolbarPosition.newValue);
+      }
+      if (changes.traceLogLimit) {
+        setTraceLogLimit(changes.traceLogLimit.newValue);
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
   }, []);
 
   const updateShellOffset = useCallback(() => {
@@ -74,6 +105,18 @@ const D365Toolbar: React.FC = () => {
   }, [showSchemaNames]);
 
   useEffect(() => {
+    allFieldsVisibleRef.current = allFieldsVisible;
+  }, [allFieldsVisible]);
+
+  useEffect(() => {
+    allSectionsVisibleRef.current = allSectionsVisible;
+  }, [allSectionsVisible]);
+
+  useEffect(() => {
+    fieldsBlurredRef.current = fieldsBlurred;
+  }, [fieldsBlurred]);
+
+  useEffect(() => {
     const { history } = window;
     let lastUrl = window.location.href;
 
@@ -89,11 +132,50 @@ const D365Toolbar: React.FC = () => {
       });
     };
 
+    const resetFieldsVisibility = () => {
+      if (!allFieldsVisibleRef.current) {
+        return;
+      }
+
+      allFieldsVisibleRef.current = false;
+      setAllFieldsVisible(false);
+      helper.toggleAllFields(false).catch((error: any) => {
+        console.warn('D365 Helper: Failed to reset fields visibility after navigation', error);
+      });
+    };
+
+    const resetSectionsVisibility = () => {
+      if (!allSectionsVisibleRef.current) {
+        return;
+      }
+
+      allSectionsVisibleRef.current = false;
+      setAllSectionsVisible(false);
+      helper.toggleAllSections(false).catch((error: any) => {
+        console.warn('D365 Helper: Failed to reset sections visibility after navigation', error);
+      });
+    };
+
+    const resetFieldsBlur = () => {
+      if (!fieldsBlurredRef.current) {
+        return;
+      }
+
+      fieldsBlurredRef.current = false;
+      setFieldsBlurred(false);
+      helper.toggleBlurFields(false).catch((error: any) => {
+        console.warn('D365 Helper: Failed to reset fields blur after navigation', error);
+      });
+    };
+
     const handlePotentialNavigation = () => {
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
         resetSchemaOverlay();
+        resetFieldsVisibility();
+        resetSectionsVisibility();
+        resetFieldsBlur();
       }
     };
 
@@ -168,6 +250,19 @@ const D365Toolbar: React.FC = () => {
     } catch (error: any) {
       setAllSectionsVisible(!newState); // Revert state on error
       const message = error?.message || 'Error toggling sections';
+      showNotification(message);
+    }
+  };
+
+  const handleToggleBlurFields = async () => {
+    const newState = !fieldsBlurred;
+    setFieldsBlurred(newState);
+    try {
+      await helper.toggleBlurFields(newState);
+      showNotification(newState ? 'Fields blurred for privacy' : 'Field blur removed');
+    } catch (error: any) {
+      setFieldsBlurred(!newState); // Revert state on error
+      const message = error?.message || 'Error toggling field blur';
       showNotification(message);
     }
   };
@@ -262,7 +357,7 @@ const D365Toolbar: React.FC = () => {
   const loadPluginTraceLogs = async (openModal: boolean = false) => {
     try {
       showNotification('Loading plugin trace logs...');
-      const data = await helper.getPluginTraceLogs();
+      const data = await helper.getPluginTraceLogs(traceLogLimit);
       setTraceLogData(data);
       if (openModal) {
         setShowTraceLogs(true);
@@ -360,6 +455,38 @@ const D365Toolbar: React.FC = () => {
     setODataFieldsData(null);
   };
 
+  const loadAuditHistory = async (showLoading: boolean) => {
+    try {
+      if (showLoading) {
+        showNotification('Loading audit history...');
+      }
+      const data = await helper.getAuditHistory();
+      setAuditHistoryData(data);
+      setShowAuditHistory(true);
+      if (showLoading) {
+        showNotification('Audit history loaded');
+      }
+    } catch (error: any) {
+      const message = error?.message || 'Error loading audit history';
+      showNotification(message);
+      setAuditHistoryData({ records: [], error: message });
+      setShowAuditHistory(true);
+    }
+  };
+
+  const handleShowAuditHistory = async () => {
+    await loadAuditHistory(true);
+  };
+
+  const handleRefreshAuditHistory = async () => {
+    await loadAuditHistory(false);
+  };
+
+  const handleCloseAuditHistory = () => {
+    setShowAuditHistory(false);
+    setAuditHistoryData(null);
+  };
+
   const handleUnlockFields = async () => {
     try {
       const count = await helper.unlockFields();
@@ -379,17 +506,43 @@ const D365Toolbar: React.FC = () => {
   };
 
   const handleEnableDevMode = async () => {
+    const newState = !devModeActive;
+
     try {
-      showNotification('Activating Developer Mode...');
-      await helper.toggleAllFields(true);
-      await helper.toggleAllSections(true);
-      setAllFieldsVisible(true);
-      setAllSectionsVisible(true);
-      const unlocked = await helper.unlockFields();
-      const disabled = await helper.disableFieldRequirements();
-      showNotification(`Dev Mode: enabled ${unlocked} fields and ${disabled} controls for testing.`);
+      if (newState) {
+        // Activate Dev Mode
+        showNotification('Activating Developer Mode...');
+        await helper.toggleAllFields(true);
+        await helper.toggleAllSections(true);
+        setAllFieldsVisible(true);
+        setAllSectionsVisible(true);
+        const unlocked = await helper.unlockFields();
+        const disabled = await helper.disableFieldRequirements();
+        setDevModeActive(true);
+        showNotification(`Dev Mode: enabled ${unlocked} fields and ${disabled} controls for testing.`);
+      } else {
+        // Deactivate Dev Mode - reset everything
+        showNotification('Deactivating Developer Mode...');
+
+        // Reset fields visibility
+        await helper.toggleAllFields(false);
+        setAllFieldsVisible(false);
+
+        // Reset sections visibility
+        await helper.toggleAllSections(false);
+        setAllSectionsVisible(false);
+
+        // Reset schema overlay
+        if (showSchemaNames) {
+          await helper.toggleSchemaOverlay(false);
+          setShowSchemaNames(false);
+        }
+
+        setDevModeActive(false);
+        showNotification('Dev Mode deactivated - form reset to original state');
+      }
     } catch (error) {
-      showNotification('Error enabling Developer Mode');
+      showNotification(newState ? 'Error enabling Developer Mode' : 'Error disabling Developer Mode');
     }
   };
 
@@ -513,11 +666,18 @@ const D365Toolbar: React.FC = () => {
             Test Data
           </button>
           <button
-            className="d365-toolbar-btn"
+            className={`d365-toolbar-btn ${devModeActive ? 'd365-toolbar-btn-active' : ''}`}
             onClick={handleEnableDevMode}
-            title="Show all fields and enable all controls for development"
+            title="Toggle Developer Mode - shows all fields, sections, and enables editing"
           >
-            Dev Mode
+            {devModeActive ? 'Deactivate' : 'Dev Mode'}
+          </button>
+          <button
+            className={`d365-toolbar-btn ${fieldsBlurred ? 'd365-toolbar-btn-active' : ''}`}
+            onClick={handleToggleBlurFields}
+            title="Blur field values for privacy when sharing screen or taking screenshots"
+          >
+            {fieldsBlurred ? 'Unblur' : 'Blur Fields'}
           </button>
         </div>
 
@@ -572,6 +732,13 @@ const D365Toolbar: React.FC = () => {
           >
             OData Fields
           </button>
+          <button
+            className="d365-toolbar-btn"
+            onClick={handleShowAuditHistory}
+            title="View audit history for this record"
+          >
+            Audit History
+          </button>
         </div>
 
         <div className="d365-toolbar-section d365-toolbar-actions">
@@ -613,6 +780,14 @@ const D365Toolbar: React.FC = () => {
           data={odataFieldsData}
           onClose={handleCloseODataFields}
           onRefresh={handleRefreshODataFields}
+        />
+      )}
+
+      {showAuditHistory && auditHistoryData && (
+        <AuditHistoryViewer
+          data={auditHistoryData}
+          onClose={handleCloseAuditHistory}
+          onRefresh={handleRefreshAuditHistory}
         />
       )}
     </div>

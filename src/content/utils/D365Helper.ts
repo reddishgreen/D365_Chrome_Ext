@@ -195,6 +195,16 @@ export class D365Helper {
     }
   }
 
+  // Toggle blur on all field values
+  async toggleBlurFields(blur: boolean): Promise<void> {
+    try {
+      await this.sendRequest('TOGGLE_BLUR_FIELDS', { blur });
+    } catch (error) {
+      console.error('Error toggling field blur:', error);
+      throw error;
+    }
+  }
+
   // Get all schema names
   async getAllSchemaNames(): Promise<string[]> {
     try {
@@ -281,9 +291,16 @@ export class D365Helper {
       console.log('D365 Helper: Creating overlays for', controlInfo.length, 'controls');
 
       const processedContainers = new Set<HTMLElement>();
+      const processedSchemaNames = new Set<string>();
 
       controlInfo.forEach((info: any) => {
         try {
+          // Skip if we already created an overlay for this schema name
+          if (processedSchemaNames.has(info.schemaName)) {
+            console.debug('D365 Helper: Schema name already processed:', info.schemaName);
+            return;
+          }
+
           // Try multiple ways to find the element
           let controlElement = document.getElementById(info.controlName);
 
@@ -298,12 +315,46 @@ export class D365Helper {
           }
 
           if (controlElement) {
-            // Try multiple ways to find a suitable container
-            let container = controlElement.closest('[data-id]') ||
-                          controlElement.closest('.control-container') ||
-                          controlElement.closest('[data-control-name]') ||
-                          controlElement.closest('div[role="group"]') ||
-                          controlElement.parentElement;
+            // Find the proper field container, avoiding lookup value containers
+            let container: HTMLElement | null = null;
+
+            // First try to find the field section container with data-id matching the control
+            const dataIdContainer = controlElement.closest(`[data-id="${info.controlName}"]`);
+            if (dataIdContainer) {
+              container = dataIdContainer as HTMLElement;
+            } else {
+              // Try other standard containers, but avoid lookup-specific elements
+              const candidates = [
+                controlElement.closest('.control-container'),
+                controlElement.closest('[data-control-name]'),
+                controlElement.closest('div[role="group"]'),
+                controlElement.closest('[data-id]')
+              ];
+
+              for (const candidate of candidates) {
+                if (candidate) {
+                  const elem = candidate as HTMLElement;
+                  // Skip if this looks like a lookup value container
+                  const classList = elem.classList.toString();
+                  const hasLookupClass = classList.includes('lookup') ||
+                                        classList.includes('ms-crm-Inline-Value') ||
+                                        classList.includes('ms-crm-Inline-Item');
+
+                  // Skip if it's inside a lookup value display
+                  const isInLookupValue = elem.closest('.ms-crm-Inline-Value, .ms-crm-Inline-Item, [class*="lookupValue"]');
+
+                  if (!hasLookupClass && !isInLookupValue) {
+                    container = elem;
+                    break;
+                  }
+                }
+              }
+
+              // Fallback to parent if no suitable container found
+              if (!container) {
+                container = controlElement.parentElement;
+              }
+            }
 
             if (container) {
               const parentElement = container as HTMLElement;
@@ -313,7 +364,18 @@ export class D365Helper {
                 return;
               }
 
+              // Double-check: Don't add overlays to lookup value containers
+              const parentClasses = parentElement.className;
+              if (parentClasses.includes('Inline-Value') ||
+                  parentClasses.includes('Inline-Item') ||
+                  parentClasses.includes('lookupValue') ||
+                  parentElement.querySelector('.ms-crm-Inline-Value, .ms-crm-Inline-Item')) {
+                console.debug('D365 Helper: Skipping lookup value container for', info.schemaName);
+                return;
+              }
+
               processedContainers.add(parentElement);
+              processedSchemaNames.add(info.schemaName);
 
               const overlay = document.createElement('div');
               overlay.className = 'd365-schema-overlay';
@@ -409,6 +471,16 @@ export class D365Helper {
       return await this.sendRequest('GET_ODATA_FIELDS');
     } catch (error) {
       console.error('Error getting OData fields:', error);
+      throw error;
+    }
+  }
+
+  // Get audit history for current record
+  async getAuditHistory(): Promise<any> {
+    try {
+      return await this.sendRequest('GET_AUDIT_HISTORY');
+    } catch (error) {
+      console.error('Error getting audit history:', error);
       throw error;
     }
   }
