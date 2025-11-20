@@ -3,6 +3,95 @@ import './Popup.css';
 
 type TabType = 'features' | 'settings';
 
+// Toolbar customization types
+type SectionId = 'fields' | 'sections' | 'schema' | 'navigation' | 'devtools' | 'tools';
+
+interface ButtonConfig {
+  id: string;
+  label: string;
+  description: string;
+}
+
+interface SectionConfig {
+  id: SectionId;
+  label: string;
+  buttons: ButtonConfig[];
+}
+
+interface ToolbarConfig {
+  sectionOrder: SectionId[];
+  buttonVisibility: Record<string, boolean>;
+}
+
+// Default toolbar configuration
+const DEFAULT_SECTIONS: SectionConfig[] = [
+  {
+    id: 'fields',
+    label: 'Fields',
+    buttons: [
+      { id: 'fields.showAll', label: 'Show All / Hide All', description: 'Toggle visibility of all fields' }
+    ]
+  },
+  {
+    id: 'sections',
+    label: 'Sections',
+    buttons: [
+      { id: 'sections.showAll', label: 'Show All / Hide All', description: 'Toggle visibility of all sections' }
+    ]
+  },
+  {
+    id: 'schema',
+    label: 'Schema',
+    buttons: [
+      { id: 'schema.showNames', label: 'Show Names / Hide Names', description: 'Toggle schema name overlays' },
+      { id: 'schema.copyAll', label: 'Copy All', description: 'Copy all schema names' }
+    ]
+  },
+  {
+    id: 'navigation',
+    label: 'Navigation',
+    buttons: [
+      { id: 'navigation.solutions', label: 'Solutions', description: 'Open solutions page' },
+      { id: 'navigation.adminCenter', label: 'Admin Center', description: 'Open Power Platform admin center' }
+    ]
+  },
+  {
+    id: 'devtools',
+    label: 'Dev Tools',
+    buttons: [
+      { id: 'devtools.enableEditing', label: 'Enable Editing', description: 'Enable editing for development' },
+      { id: 'devtools.testData', label: 'Test Data', description: 'Fill fields with test data' },
+      { id: 'devtools.devMode', label: 'Dev Mode', description: 'Toggle Developer Mode' },
+      { id: 'devtools.blurFields', label: 'Blur Fields', description: 'Blur fields for privacy' }
+    ]
+  },
+  {
+    id: 'tools',
+    label: 'Tools',
+    buttons: [
+      { id: 'tools.copyId', label: 'Copy ID', description: 'Copy current record ID' },
+      { id: 'tools.cacheRefresh', label: 'Cache Refresh', description: 'Perform hard refresh' },
+      { id: 'tools.webApi', label: 'Web API', description: 'Open Web API data' },
+      { id: 'tools.traceLogs', label: 'Trace Logs', description: 'View Plugin Trace Logs' },
+      { id: 'tools.jsLibraries', label: 'JS Libraries', description: 'View JavaScript libraries' },
+      { id: 'tools.optionSets', label: 'Option Sets', description: 'View option set values' },
+      { id: 'tools.odataFields', label: 'OData Fields', description: 'View OData field metadata' },
+      { id: 'tools.auditHistory', label: 'Audit History', description: 'View audit history' },
+      { id: 'tools.formEditor', label: 'Form Editor', description: 'Open form editor' }
+    ]
+  }
+];
+
+const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
+  sectionOrder: ['fields', 'sections', 'schema', 'navigation', 'devtools', 'tools'],
+  buttonVisibility: DEFAULT_SECTIONS.reduce((acc, section) => {
+    section.buttons.forEach(button => {
+      acc[button.id] = true;
+    });
+    return acc;
+  }, {} as Record<string, boolean>)
+};
+
 const Popup: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('features');
   const [showTool, setShowTool] = useState(true);
@@ -11,6 +100,8 @@ const Popup: React.FC = () => {
   const [schemaOverlayColor, setSchemaOverlayColor] = useState('#0078d4');
   const [traceLogLimit, setTraceLogLimit] = useState(20);
   const [skipPluginsByDefault, setSkipPluginsByDefault] = useState(false);
+  const [toolbarConfig, setToolbarConfig] = useState<ToolbarConfig>(DEFAULT_TOOLBAR_CONFIG);
+  const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null);
 
   useEffect(() => {
     chrome.storage.sync.get([
@@ -19,7 +110,8 @@ const Popup: React.FC = () => {
       'toolbarPosition',
       'schemaOverlayColor',
       'traceLogLimit',
-      'skipPluginsByDefault'
+      'skipPluginsByDefault',
+      'toolbarConfig'
     ], (result) => {
       if (result.showTool !== undefined) {
         setShowTool(result.showTool);
@@ -38,6 +130,9 @@ const Popup: React.FC = () => {
       }
       if (result.skipPluginsByDefault !== undefined) {
         setSkipPluginsByDefault(result.skipPluginsByDefault);
+      }
+      if (result.toolbarConfig !== undefined) {
+        setToolbarConfig(result.toolbarConfig);
       }
     });
   }, []);
@@ -70,6 +165,41 @@ const Popup: React.FC = () => {
   const handleSkipPluginsByDefaultChange = (value: boolean) => {
     setSkipPluginsByDefault(value);
     chrome.storage.sync.set({ skipPluginsByDefault: value });
+  };
+
+  const handleSectionOrderChange = (newOrder: SectionId[]) => {
+    const newConfig = { ...toolbarConfig, sectionOrder: newOrder };
+    setToolbarConfig(newConfig);
+    chrome.storage.sync.set({ toolbarConfig: newConfig });
+  };
+
+  const handleButtonVisibilityChange = (buttonId: string, visible: boolean) => {
+    const newConfig = {
+      ...toolbarConfig,
+      buttonVisibility: { ...toolbarConfig.buttonVisibility, [buttonId]: visible }
+    };
+    setToolbarConfig(newConfig);
+    chrome.storage.sync.set({ toolbarConfig: newConfig });
+  };
+
+  const handleDragStart = (index: number) => {
+    setDraggedSectionIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedSectionIndex === null) return;
+
+    const newOrder = [...toolbarConfig.sectionOrder];
+    const [draggedSection] = newOrder.splice(draggedSectionIndex, 1);
+    newOrder.splice(dropIndex, 0, draggedSection);
+
+    handleSectionOrderChange(newOrder);
+    setDraggedSectionIndex(null);
   };
 
   return (
@@ -322,6 +452,45 @@ const Popup: React.FC = () => {
                 </button>
               </div>
             </section>
+
+            <h3 className="settings-section-title">Toolbar Customization</h3>
+            <p className="settings-hint">Drag sections to reorder them. Uncheck buttons to hide them from the toolbar.</p>
+
+            <div className="toolbar-customization">
+              {toolbarConfig.sectionOrder.map((sectionId, index) => {
+                const section = DEFAULT_SECTIONS.find(s => s.id === sectionId);
+                if (!section) return null;
+
+                return (
+                  <div
+                    key={section.id}
+                    className={`toolbar-section-card ${draggedSectionIndex === index ? 'dragging' : ''}`}
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                  >
+                    <div className="toolbar-section-card-header">
+                      <span className="drag-handle" aria-hidden="true">&#8942;&#8942;</span>
+                      <span className="toolbar-section-card-title">{section.label}</span>
+                    </div>
+                    <div className="toolbar-section-card-buttons">
+                      {section.buttons.map(button => (
+                        <label key={button.id} className="toolbar-button-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={toolbarConfig.buttonVisibility[button.id] ?? true}
+                            onChange={(e) => handleButtonVisibilityChange(button.id, e.target.checked)}
+                          />
+                          <span className="toolbar-button-label">{button.label}</span>
+                          <span className="toolbar-button-description">{button.description}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
       </div>

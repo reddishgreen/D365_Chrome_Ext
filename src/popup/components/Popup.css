@@ -474,3 +474,114 @@
 .popup-content::-webkit-scrollbar-thumb:hover {
   background: #A39B48;
 }
+
+/* Toolbar Customization Styles */
+.settings-hint {
+  font-size: 12px;
+  color: #5f6368;
+  margin: -8px 0 16px 0;
+  font-style: italic;
+  padding-left: 4px;
+}
+
+.toolbar-customization {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbar-section-card {
+  background: white;
+  border: 2px solid #e8eaed;
+  border-radius: 12px;
+  padding: 16px;
+  cursor: move;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.toolbar-section-card:hover {
+  border-color: #A39B48;
+  box-shadow: 0 4px 12px rgba(163, 155, 72, 0.15);
+  transform: translateY(-2px);
+}
+
+.toolbar-section-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.toolbar-section-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #f0f1f3;
+}
+
+.drag-handle {
+  font-size: 20px;
+  color: #A39B48;
+  cursor: grab;
+  line-height: 1;
+  font-weight: bold;
+  transition: color 0.2s ease;
+}
+
+.toolbar-section-card:hover .drag-handle {
+  color: #0C274C;
+}
+
+.toolbar-section-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0C274C;
+  letter-spacing: -0.2px;
+}
+
+.toolbar-section-card-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolbar-button-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #f8f9fb;
+}
+
+.toolbar-button-checkbox:hover {
+  background: rgba(163, 155, 72, 0.08);
+}
+
+.toolbar-button-checkbox input[type="checkbox"] {
+  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #0C274C;
+  flex-shrink: 0;
+}
+
+.toolbar-button-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0C274C;
+  line-height: 1.4;
+  flex: 1;
+}
+
+.toolbar-button-description {
+  font-size: 11px;
+  color: #5f6368;
+  line-height: 1.4;
+  display: block;
+  margin-top: 2px;
+}

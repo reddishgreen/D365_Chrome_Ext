@@ -7,6 +7,19 @@ import OptionSetsViewer, { OptionSetsData } from './OptionSetsViewer';
 import ODataFieldsViewer, { ODataFieldsData } from './ODataFieldsViewer';
 import AuditHistoryViewer, { AuditHistoryData } from './AuditHistoryViewer';
 
+// Toolbar configuration types
+type SectionId = 'fields' | 'sections' | 'schema' | 'navigation' | 'devtools' | 'tools';
+
+interface ToolbarConfig {
+  sectionOrder: SectionId[];
+  buttonVisibility: Record<string, boolean>;
+}
+
+const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
+  sectionOrder: ['fields', 'sections', 'schema', 'navigation', 'devtools', 'tools'],
+  buttonVisibility: {}
+};
+
 const D365Toolbar: React.FC = () => {
   const [showSchemaNames, setShowSchemaNames] = useState(false);
   const [allFieldsVisible, setAllFieldsVisible] = useState(false);
@@ -27,6 +40,7 @@ const D365Toolbar: React.FC = () => {
   const [notificationDuration, setNotificationDuration] = useState(3);
   const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('top');
   const [traceLogLimit, setTraceLogLimit] = useState(20);
+  const [toolbarConfig, setToolbarConfig] = useState<ToolbarConfig>(DEFAULT_TOOLBAR_CONFIG);
   const showSchemaNamesRef = useRef(showSchemaNames);
   const allFieldsVisibleRef = useRef(allFieldsVisible);
   const allSectionsVisibleRef = useRef(allSectionsVisible);
@@ -42,7 +56,7 @@ const D365Toolbar: React.FC = () => {
 
   // Load settings
   useEffect(() => {
-    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit'], (result) => {
+    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit', 'toolbarConfig'], (result) => {
       if (result.notificationDuration !== undefined) {
         setNotificationDuration(result.notificationDuration);
       }
@@ -51,6 +65,9 @@ const D365Toolbar: React.FC = () => {
       }
       if (result.traceLogLimit !== undefined) {
         setTraceLogLimit(result.traceLogLimit);
+      }
+      if (result.toolbarConfig !== undefined) {
+        setToolbarConfig(result.toolbarConfig);
       }
     });
 
@@ -64,6 +81,9 @@ const D365Toolbar: React.FC = () => {
       }
       if (changes.traceLogLimit) {
         setTraceLogLimit(changes.traceLogLimit.newValue);
+      }
+      if (changes.toolbarConfig) {
+        setToolbarConfig(changes.toolbarConfig.newValue);
       }
     };
 
@@ -569,6 +589,253 @@ const D365Toolbar: React.FC = () => {
     location.reload();
   };
 
+  // Check if button should be visible based on config
+  const isButtonVisible = (buttonId: string): boolean => {
+    return toolbarConfig.buttonVisibility[buttonId] !== false;
+  };
+
+  // Render section based on section ID
+  const renderSection = (sectionId: SectionId) => {
+    switch (sectionId) {
+      case 'fields':
+        if (!isButtonVisible('fields.showAll')) return null;
+        return (
+          <div key="fields" className="d365-toolbar-section">
+            <span className="d365-toolbar-section-label">Fields:</span>
+            <button
+              className={`d365-toolbar-btn ${allFieldsVisible ? 'd365-toolbar-btn-active' : ''}`}
+              onClick={handleToggleFields}
+              title="Toggle visibility of all fields on the form"
+            >
+              {allFieldsVisible ? 'Hide All' : 'Show All'}
+            </button>
+          </div>
+        );
+
+      case 'sections':
+        if (!isButtonVisible('sections.showAll')) return null;
+        return (
+          <div key="sections" className="d365-toolbar-section">
+            <span className="d365-toolbar-section-label">Sections:</span>
+            <button
+              className={`d365-toolbar-btn ${allSectionsVisible ? 'd365-toolbar-btn-active' : ''}`}
+              onClick={handleToggleSections}
+              title="Toggle visibility of all sections on the form"
+            >
+              {allSectionsVisible ? 'Hide All' : 'Show All'}
+            </button>
+          </div>
+        );
+
+      case 'schema':
+        const showNamesVisible = isButtonVisible('schema.showNames');
+        const copyAllVisible = isButtonVisible('schema.copyAll');
+        if (!showNamesVisible && !copyAllVisible) return null;
+        return (
+          <div key="schema" className="d365-toolbar-section">
+            <span className="d365-toolbar-section-label">Schema:</span>
+            {showNamesVisible && (
+              <button
+                className={`d365-toolbar-btn ${showSchemaNames ? 'd365-toolbar-btn-active' : ''}`}
+                onClick={handleToggleSchemaNames}
+                title="Toggle schema name overlays on fields"
+              >
+                {showSchemaNames ? 'Hide Names' : 'Show Names'}
+              </button>
+            )}
+            {copyAllVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleCopyAllSchemaNames}
+                title="Copy all schema names to clipboard"
+              >
+                Copy All
+              </button>
+            )}
+          </div>
+        );
+
+      case 'navigation':
+        const solutionsVisible = isButtonVisible('navigation.solutions');
+        const adminCenterVisible = isButtonVisible('navigation.adminCenter');
+        if (!solutionsVisible && !adminCenterVisible) return null;
+        return (
+          <div key="navigation" className="d365-toolbar-section">
+            <span className="d365-toolbar-section-label">Navigation:</span>
+            {solutionsVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleOpenSolutions}
+                title="Open solutions page"
+              >
+                Solutions
+              </button>
+            )}
+            {adminCenterVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleOpenAdminCenter}
+                title="Open Power Platform admin center"
+              >
+                Admin Center
+              </button>
+            )}
+          </div>
+        );
+
+      case 'devtools':
+        const enableEditingVisible = isButtonVisible('devtools.enableEditing');
+        const testDataVisible = isButtonVisible('devtools.testData');
+        const devModeVisible = isButtonVisible('devtools.devMode');
+        const blurFieldsVisible = isButtonVisible('devtools.blurFields');
+        if (!enableEditingVisible && !testDataVisible && !devModeVisible && !blurFieldsVisible) return null;
+        return (
+          <div key="devtools" className="d365-toolbar-section">
+            <span className="d365-toolbar-section-label">Dev Tools:</span>
+            {enableEditingVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleUnlockFields}
+                title="Enable editing for development and testing"
+              >
+                Enable Editing
+              </button>
+            )}
+            {testDataVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleAutoFill}
+                title="Fill fields with test data for development"
+              >
+                Test Data
+              </button>
+            )}
+            {devModeVisible && (
+              <button
+                className={`d365-toolbar-btn ${devModeActive ? 'd365-toolbar-btn-active' : ''}`}
+                onClick={handleEnableDevMode}
+                title="Toggle Developer Mode - shows all fields, sections, and enables editing"
+              >
+                {devModeActive ? 'Deactivate' : 'Dev Mode'}
+              </button>
+            )}
+            {blurFieldsVisible && (
+              <button
+                className={`d365-toolbar-btn ${fieldsBlurred ? 'd365-toolbar-btn-active' : ''}`}
+                onClick={handleToggleBlurFields}
+                title="Blur field values for privacy when sharing screen or taking screenshots"
+              >
+                {fieldsBlurred ? 'Unblur' : 'Blur Fields'}
+              </button>
+            )}
+          </div>
+        );
+
+      case 'tools':
+        const copyIdVisible = isButtonVisible('tools.copyId');
+        const cacheRefreshVisible = isButtonVisible('tools.cacheRefresh');
+        const webApiVisible = isButtonVisible('tools.webApi');
+        const traceLogsVisible = isButtonVisible('tools.traceLogs');
+        const jsLibrariesVisible = isButtonVisible('tools.jsLibraries');
+        const optionSetsVisible = isButtonVisible('tools.optionSets');
+        const odataFieldsVisible = isButtonVisible('tools.odataFields');
+        const auditHistoryVisible = isButtonVisible('tools.auditHistory');
+        const formEditorVisible = isButtonVisible('tools.formEditor');
+        const anyVisible = copyIdVisible || cacheRefreshVisible || webApiVisible || traceLogsVisible || 
+                          jsLibrariesVisible || optionSetsVisible || odataFieldsVisible || auditHistoryVisible || formEditorVisible;
+        if (!anyVisible) return null;
+        return (
+          <div key="tools" className="d365-toolbar-section">
+            <span className="d365-toolbar-section-label">Tools:</span>
+            {copyIdVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleCopyRecordId}
+                title="Copy current record ID"
+              >
+                Copy ID
+              </button>
+            )}
+            {cacheRefreshVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleCacheRefresh}
+                title="Perform hard refresh (Ctrl+F5) to clear cache"
+              >
+                Cache Refresh
+              </button>
+            )}
+            {webApiVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleOpenWebAPI}
+                title="Open Web API data in new tab"
+              >
+                Web API
+              </button>
+            )}
+            {traceLogsVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleShowTraceLogs}
+                title="View Plugin Trace Logs"
+              >
+                Trace Logs
+              </button>
+            )}
+            {jsLibrariesVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleShowLibraries}
+                title="View JavaScript libraries and event handlers"
+              >
+                JS Libraries
+              </button>
+            )}
+            {optionSetsVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleShowOptionSets}
+                title="View option set values used on this form"
+              >
+                Option Sets
+              </button>
+            )}
+            {odataFieldsVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleShowODataFields}
+                title="View OData field metadata for this entity"
+              >
+                OData Fields
+              </button>
+            )}
+            {auditHistoryVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleShowAuditHistory}
+                title="View audit history for this record"
+              >
+                Audit History
+              </button>
+            )}
+            {formEditorVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleOpenFormEditor}
+                title="Open form editor"
+              >
+                Form Editor
+              </button>
+            )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div ref={toolbarRef} className={`d365-toolbar d365-toolbar-${toolbarPosition}`}>
       <div className="d365-toolbar-content">
@@ -591,155 +858,7 @@ const D365Toolbar: React.FC = () => {
           </a>
         </div>
 
-        <div className="d365-toolbar-section">
-          <span className="d365-toolbar-section-label">Fields:</span>
-          <button
-            className={`d365-toolbar-btn ${allFieldsVisible ? 'd365-toolbar-btn-active' : ''}`}
-            onClick={handleToggleFields}
-            title="Toggle visibility of all fields on the form"
-          >
-            {allFieldsVisible ? 'Hide All' : 'Show All'}
-          </button>
-        </div>
-
-        <div className="d365-toolbar-section">
-          <span className="d365-toolbar-section-label">Sections:</span>
-          <button
-            className={`d365-toolbar-btn ${allSectionsVisible ? 'd365-toolbar-btn-active' : ''}`}
-            onClick={handleToggleSections}
-            title="Toggle visibility of all sections on the form"
-          >
-            {allSectionsVisible ? 'Hide All' : 'Show All'}
-          </button>
-        </div>
-
-        <div className="d365-toolbar-section">
-          <span className="d365-toolbar-section-label">Schema:</span>
-          <button
-            className={`d365-toolbar-btn ${showSchemaNames ? 'd365-toolbar-btn-active' : ''}`}
-            onClick={handleToggleSchemaNames}
-            title="Toggle schema name overlays on fields"
-          >
-            {showSchemaNames ? 'Hide Names' : 'Show Names'}
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleCopyAllSchemaNames}
-            title="Copy all schema names to clipboard"
-          >
-            Copy All
-          </button>
-        </div>
-
-        <div className="d365-toolbar-section">
-          <span className="d365-toolbar-section-label">Navigation:</span>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleOpenSolutions}
-            title="Open solutions page"
-          >
-            Solutions
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleOpenAdminCenter}
-            title="Open Power Platform admin center"
-          >
-            Admin Center
-          </button>
-        </div>
-
-        <div className="d365-toolbar-section">
-          <span className="d365-toolbar-section-label">Dev Tools:</span>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleUnlockFields}
-            title="Enable editing for development and testing"
-          >
-            Enable Editing
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleAutoFill}
-            title="Fill fields with test data for development"
-          >
-            Test Data
-          </button>
-          <button
-            className={`d365-toolbar-btn ${devModeActive ? 'd365-toolbar-btn-active' : ''}`}
-            onClick={handleEnableDevMode}
-            title="Toggle Developer Mode - shows all fields, sections, and enables editing"
-          >
-            {devModeActive ? 'Deactivate' : 'Dev Mode'}
-          </button>
-          <button
-            className={`d365-toolbar-btn ${fieldsBlurred ? 'd365-toolbar-btn-active' : ''}`}
-            onClick={handleToggleBlurFields}
-            title="Blur field values for privacy when sharing screen or taking screenshots"
-          >
-            {fieldsBlurred ? 'Unblur' : 'Blur Fields'}
-          </button>
-        </div>
-
-        <div className="d365-toolbar-section">
-          <span className="d365-toolbar-section-label">Tools:</span>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleCopyRecordId}
-            title="Copy current record ID"
-          >
-            Copy ID
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleCacheRefresh}
-            title="Perform hard refresh (Ctrl+F5) to clear cache"
-          >
-            Cache Refresh
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleOpenWebAPI}
-            title="Open Web API data in new tab"
-          >
-            Web API
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleShowTraceLogs}
-            title="View Plugin Trace Logs"
-          >
-            Trace Logs
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleShowLibraries}
-            title="View JavaScript libraries and event handlers"
-          >
-            JS Libraries
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleShowOptionSets}
-            title="View option set values used on this form"
-          >
-            Option Sets
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleShowODataFields}
-            title="View OData field metadata for this entity"
-          >
-            OData Fields
-          </button>
-          <button
-            className="d365-toolbar-btn"
-            onClick={handleShowAuditHistory}
-            title="View audit history for this record"
-          >
-            Audit History
-          </button>
-        </div>
+        {toolbarConfig.sectionOrder.map(sectionId => renderSection(sectionId))}
 
         <div className="d365-toolbar-section d365-toolbar-actions">
           <span className="d365-toolbar-version-badge">v{chrome.runtime.getManifest().version}</span>
