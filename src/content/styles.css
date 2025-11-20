@@ -1192,6 +1192,12 @@
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .d365-options-copy-btn:hover {
@@ -1207,7 +1213,7 @@
 .d365-options-table-head,
 .d365-options-table-row {
   display: grid;
-  grid-template-columns: 120px 1fr 80px;
+  grid-template-columns: 120px 1fr 60px 60px;
   gap: 12px;
   align-items: center;
   padding: 10px 18px;
@@ -1220,9 +1226,18 @@
   color: #555;
 }
 
+.d365-options-head-center {
+  text-align: center;
+  justify-self: center;
+}
+
 .d365-options-table-row {
   background: white;
   border-top: 1px solid #f0f0f0;
+}
+
+.d365-options-table-row > button {
+  justify-self: center;
 }
 
 .d365-options-table-row-default {

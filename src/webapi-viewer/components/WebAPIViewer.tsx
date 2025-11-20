@@ -21,6 +21,33 @@ const deriveAttributeName = (lookupKey: string): string => {
 
 const escapeODataIdentifier = (value: string): string => value.replace(/'/g, "''");
 
+const filterData = (obj: any, term: string): any => {
+  if (!term) return obj;
+
+  const lowerTerm = term.toLowerCase();
+
+  if (typeof obj === 'object' && obj !== null) {
+    const filtered: any = Array.isArray(obj) ? [] : {};
+
+    for (const key in obj) {
+      if (key.toLowerCase().includes(lowerTerm)) {
+        filtered[key] = obj[key];
+      } else if (typeof obj[key] === 'string' && obj[key].toLowerCase().includes(lowerTerm)) {
+        filtered[key] = obj[key];
+      } else if (typeof obj[key] === 'object') {
+        const nested = filterData(obj[key], term);
+        if (nested && Object.keys(nested).length > 0) {
+          filtered[key] = nested;
+        }
+      }
+    }
+
+    return Object.keys(filtered).length > 0 ? filtered : null;
+  }
+
+  return obj;
+};
+
 const WebAPIViewer: React.FC = () => {
   const [apiUrl, setApiUrl] = useState<string>('');
   const [data, setData] = useState<ApiData | null>(null);
@@ -37,6 +64,7 @@ const WebAPIViewer: React.FC = () => {
   const entityMetadataCache = useRef<Map<string, LookupEntityMetadata>>(new Map());
   const entitySetToLogicalCache = useRef<Map<string, string>>(new Map());
   const lookupTargetsCache = useRef<Map<string, string[]>>(new Map());
+  const navPropertyCache = useRef<Map<string, string>>(new Map());
 
   const apiPathInfo = useMemo<ApiPathInfo>(() => {
     if (!apiUrl) {
@@ -65,6 +93,7 @@ const WebAPIViewer: React.FC = () => {
     entityMetadataCache.current.clear();
     lookupTargetsCache.current.clear();
     entitySetToLogicalCache.current.clear();
+    navPropertyCache.current.clear();
   }, [apiBaseUrl]);
 
   useEffect(() => {
@@ -272,6 +301,71 @@ const WebAPIViewer: React.FC = () => {
     [apiBaseUrl]
   );
 
+  const getNavigationPropertyName = useCallback(
+    async (
+      sourceEntityLogical: string,
+      attributeLogical: string,
+      targetEntityLogical?: string
+    ): Promise<string> => {
+      if (!sourceEntityLogical || !attributeLogical || !apiBaseUrl) {
+        return attributeLogical;
+      }
+
+      // Cache key needs to handle optional target
+      const cacheKey = `${sourceEntityLogical}|${attributeLogical}|${targetEntityLogical || ''}`.toLowerCase();
+      const cached = navPropertyCache.current.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
+      try {
+        // We filter by ReferencingAttribute. 
+        // If target is known, we add that to filter to be precise (helpful for some edge cases).
+        // If target is NOT known, we just look for any relationship using this attribute.
+        
+        let filter = `ReferencingAttribute eq '${attributeLogical}'`;
+        if (targetEntityLogical) {
+            filter += ` and ReferencedEntity eq '${targetEntityLogical}'`;
+        }
+
+        const relationshipsUrl = `${apiBaseUrl}EntityDefinitions(LogicalName='${sourceEntityLogical}')/ManyToOneRelationships?$select=ReferencingEntityNavigationPropertyName&$filter=${filter}`;
+
+        const response = await fetch(relationshipsUrl, {
+          headers: {
+            Accept: 'application/json',
+            'OData-MaxVersion': '4.0',
+            'OData-Version': '4.0',
+          },
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          return attributeLogical;
+        }
+
+        const json = await response.json();
+        if (Array.isArray(json?.value) && json.value.length > 0) {
+          // Just take the first one found. For standard lookups, this is correct.
+          // For polymorphic lookups, they usually share the same navigation property name 
+          // (e.g. customerid -> contact or account both use 'customerid_contact'/'customerid_account' 
+          // wait, standard polymorphic like 'customerid' actually has specific ones like 'customerid_contact'.
+          // BUT standard custom lookups usually have ONE navigation property.
+          
+          const navProp = json.value[0]?.ReferencingEntityNavigationPropertyName;
+          if (navProp) {
+            navPropertyCache.current.set(cacheKey, navProp);
+            return navProp;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to resolve navigation property name', e);
+      }
+
+      return attributeLogical;
+    },
+    [apiBaseUrl]
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -320,32 +414,70 @@ const WebAPIViewer: React.FC = () => {
   };
 
   const handleLookupSelection = useCallback(
-    (lookupKey: string, selection: LookupSelection | null) => {
+    async (lookupKey: string, selection: LookupSelection | null) => {
+      const attributeName = deriveAttributeName(lookupKey);
+      let navPropName = attributeName;
+
+      // Determine target logical name to resolve navigation property
+      // If selecting, use selection. If clearing, use current value's metadata if available.
+      const logicalKey = `${lookupKey}@Microsoft.Dynamics.CRM.lookuplogicalname`;
+      const targetLogical = selection?.logicalName ?? data?.[logicalKey];
+
+      // If we have a selection or an existing value with metadata, try to resolve the navigation property
+      // Even if we DON'T have a target logical name (e.g. clearing a null field?), we should try to resolve it
+      // using just the attribute name if possible.
+      if (entityLogicalName) {
+        navPropName = await getNavigationPropertyName(
+          entityLogicalName,
+          attributeName,
+          targetLogical // might be undefined, that's okay now
+        );
+      }
+
       setEditedData((previous) => {
         const base = previous ?? (data ? { ...data } : {});
         const updated: ApiData = { ...base };
 
-        const attributeName = deriveAttributeName(lookupKey);
         const formattedKey = `${lookupKey}@OData.Community.Display.V1.FormattedValue`;
-        const logicalKey = `${lookupKey}@Microsoft.Dynamics.CRM.lookuplogicalname`;
-        const bindKey = `${attributeName}@odata.bind`;
+        // logicalKey is defined above
+        
+        const bindKey = `${navPropName}@odata.bind`;
 
         if (selection) {
           updated[lookupKey] = selection.recordId;
           updated[formattedKey] = selection.displayName;
           updated[logicalKey] = selection.logicalName;
           updated[bindKey] = `/${selection.entitySetName}(${selection.recordId})`;
+          
+          // Clean up fallback keys if we found a specific navigation property
+          if (navPropName !== attributeName) {
+            delete updated[`${attributeName}@odata.bind`];
+            // Ensure the attribute name itself is not set as a property
+            delete updated[attributeName];
+          }
         } else {
           updated[lookupKey] = null;
-          updated[bindKey] = null;
+          
+          // To disassociate, set the navigation property to null
+          updated[navPropName] = null;
+          
+          // Remove bind keys
+          delete updated[bindKey];
+          delete updated[`${attributeName}@odata.bind`];
+          
           delete updated[formattedKey];
           delete updated[logicalKey];
+
+          // If navPropName is different from attributeName, ensure attributeName is NOT in the payload
+          if (navPropName !== attributeName) {
+             delete updated[attributeName];
+          }
         }
 
         return updated;
       });
     },
-    [data]
+    [data, entityLogicalName, getNavigationPropertyName]
   );
 
   const handleSaveChanges = async () => {
@@ -358,20 +490,100 @@ const WebAPIViewer: React.FC = () => {
       // Prepare the update payload - only include changed fields
       const updatePayload: any = {};
 
+      // First pass: Identify all bind keys OR navigation properties to know which attributes to exclude
+      // We need to track both explicit binds (for setting) and null navigation properties (for clearing)
+      const navPropNames = new Set<string>();
+      
       for (const key in editedData) {
+        if (key.endsWith('@odata.bind') && editedData[key]) {
+           navPropNames.add(key.replace('@odata.bind', '').toLowerCase());
+        } else if (!key.startsWith('_') && !key.startsWith('@') && editedData[key] === null) {
+            // This might be a navigation property being cleared.
+            // We add it to the set so we can check if there's a conflicting attribute name.
+            navPropNames.add(key.toLowerCase());
+        }
+      }
+
+      for (const key in editedData) {
+        // Skip formatted values and logical names
+        if (key.endsWith('@OData.Community.Display.V1.FormattedValue') || 
+            key.endsWith('@Microsoft.Dynamics.CRM.lookuplogicalname') ||
+            key.endsWith('@Microsoft.Dynamics.CRM.associatednavigationproperty')) {
+          continue;
+        }
+
+        // Handle Bind Keys
         if (key.endsWith('@odata.bind')) {
+          // Only include if changed from original data
           if (editedData[key] !== data?.[key]) {
             updatePayload[key] = editedData[key];
           }
           continue;
         }
 
-        if (
-          !key.startsWith('@') &&
-          !key.startsWith('_') &&
-          key !== 'odata.etag' &&
-          editedData[key] !== data?.[key]
-        ) {
+        // Skip Standard/System properties that shouldn't be patched
+        // Note: We strictly skip anything starting with '_' (like _value)
+        if (key.startsWith('_') || key.startsWith('@') || key === 'odata.etag') {
+            continue;
+        }
+
+        // For regular fields:
+        // We need to avoid sending the "attribute" name (e.g. rg_patient) if we are sending
+        // the "navigation property" name (e.g. rg_Patient) either via bind or null.
+        
+        // Check if this key matches a known navigation property we are handling
+        // BUT we must be careful: if key IS the navigation property (rg_Patient), we want to send it.
+        // If key IS the attribute (rg_patient), we want to skip it.
+        // The problem is they look almost identical except for case.
+        
+        // If the key is found in navPropNames AND it's NOT the exact case-sensitive match 
+        // that exists in editedData as a navigation property... this is tricky.
+        
+        // Simpler approach:
+        // If we have "rg_Patient" (nav prop) and "rg_patient" (attr) in editedData.
+        // We want to send "rg_Patient". We want to skip "rg_patient".
+        
+        // How do we distinguish them?
+        // 1. Navigation Properties usually don't have a corresponding `_value` property in the raw data
+        //    BUT `rg_patient` (attr) definitely has `_rg_patient_value`.
+        // 2. We can check if `_` + key + `_value` exists in the ORIGINAL data. 
+        //    If `_rg_patient_value` exists, then `rg_patient` is likely the attribute.
+        
+        const isLikelyAttribute = data && (`_${key}_value` in data);
+        
+        if (isLikelyAttribute) {
+            // Check if there is a DIFFERENT key in the payload that corresponds to this attribute's navigation property
+            // e.g. key="rg_patient". navPropNames has "rg_Patient". "rg_Patient" != "rg_patient".
+            // If navPropNames has a matching entry that is NOT strictly equal to key, we assume 'key' is the shadow attribute.
+            
+            // However, we built navPropNames with lowercased keys to find matches easily.
+            // We need to check if we are sending a *different* casing version.
+            
+            const hasNavProp = navPropNames.has(key.toLowerCase());
+            
+            // We need to know if the thing we are sending is actually different from 'key'.
+            // Let's look at what we WOULD send.
+            // We iterate editedData to find the "real" nav prop.
+            
+            let sendingDifferentNavProp = false;
+            if (hasNavProp) {
+                for(const otherKey in editedData) {
+                     if (otherKey !== key && otherKey.toLowerCase() === key.toLowerCase()) {
+                         // We found a key (e.g. rg_Patient) that matches our key (rg_patient) but is different.
+                         // And we know we are sending it (checked by navPropNames existence).
+                         sendingDifferentNavProp = true;
+                         break;
+                     }
+                }
+            }
+
+            if (sendingDifferentNavProp) {
+                 // We are sending "rg_Patient", so skip "rg_patient".
+                 continue;
+            }
+        }
+
+        if (editedData[key] !== data?.[key]) {
           updatePayload[key] = editedData[key];
         }
       }
@@ -652,7 +864,7 @@ const WebAPIViewer: React.FC = () => {
       return (
         <div className="value-array">
           <span className="toggle" onClick={() => toggleSection(sectionKey)}>
-            {isExpanded ? '' : '?'} Array[{value.length}]
+            {isExpanded ? '▼' : '▶'} Array[{value.length}]
           </span>
           {isExpanded && (
             <div className="nested-content">
@@ -676,7 +888,7 @@ const WebAPIViewer: React.FC = () => {
       return (
         <div className="value-object">
           <span className="toggle" onClick={() => toggleSection(sectionKey)}>
-            {isExpanded ? '' : '?'} Object ({keys.length} properties)
+            {isExpanded ? '▼' : '▶'} Object ({keys.length} properties)
           </span>
           {isExpanded && (
             <div className="nested-content">
@@ -695,35 +907,9 @@ const WebAPIViewer: React.FC = () => {
     return <span>{String(value)}</span>;
   };
 
-
-const filterData = (obj: any, term: string): any => {
-    if (!term) return obj;
-
-    const lowerTerm = term.toLowerCase();
-
-    if (typeof obj === 'object' && obj !== null) {
-      const filtered: any = Array.isArray(obj) ? [] : {};
-
-      for (const key in obj) {
-        if (key.toLowerCase().includes(lowerTerm)) {
-          filtered[key] = obj[key];
-        } else if (typeof obj[key] === 'string' && obj[key].toLowerCase().includes(lowerTerm)) {
-          filtered[key] = obj[key];
-        } else if (typeof obj[key] === 'object') {
-          const nested = filterData(obj[key], term);
-          if (nested && Object.keys(nested).length > 0) {
-            filtered[key] = nested;
-          }
-        }
-      }
-
-      return Object.keys(filtered).length > 0 ? filtered : null;
-    }
-
-    return obj;
-  };
-
-  const displayData = searchTerm ? filterData(data, searchTerm) : data;
+  const displayData = useMemo(() => {
+    return searchTerm ? filterData(data, searchTerm) : data;
+  }, [data, searchTerm]);
 
   return (
     <div className="webapi-viewer">

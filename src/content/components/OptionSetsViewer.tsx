@@ -84,7 +84,8 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
         <div className="d365-options-table-head">
           <span>Value</span>
           <span>Label</span>
-          <span></span>
+          <span className="d365-options-head-center" title="Copy Value Only">Value</span>
+          <span className="d365-options-head-center" title="Copy Value & Label">Label</span>
         </div>
         {attribute.options.map((option, index) => {
           const key = `${attribute.logicalName}-${option.value}`;
@@ -109,15 +110,30 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
               </span>
               <button
                 className="d365-options-copy-btn"
-                onClick={() => handleCopy(`${option.value} - ${option.label}`, key)}
-                title="Copy value and label"
+                onClick={() => handleCopy(String(option.value), `${key}-val`)}
+                title="Copy value only"
               >
-                {copiedKey === key ? (
+                {copiedKey === `${key}-val` ? (
                   <span className="d365-copy-success">✓</span>
                 ) : (
                   <img
                     src={chrome.runtime.getURL('icons/rg_copy.svg')}
-                    alt="Copy"
+                    alt="Copy Value"
+                    className="d365-copy-icon"
+                  />
+                )}
+              </button>
+              <button
+                className="d365-options-copy-btn"
+                onClick={() => handleCopy(`${option.value} - ${option.label}`, `${key}-full`)}
+                title="Copy value and label"
+              >
+                {copiedKey === `${key}-full` ? (
+                  <span className="d365-copy-success">✓</span>
+                ) : (
+                  <img
+                    src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                    alt="Copy Label"
                     className="d365-copy-icon"
                   />
                 )}
