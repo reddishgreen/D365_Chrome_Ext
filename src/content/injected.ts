@@ -63,8 +63,6 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
           const controlSectionVisibility = new Map();
           const tabs = Xrm.Page.ui.tabs.get();
 
-          console.log('D365 Helper: Building control-to-section visibility map...');
-
           // First pass: Save section visibility and build control-to-section map
           tabs.forEach((tab: any) => {
             const sections = tab.sections.get();
@@ -74,26 +72,21 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
 
               // Save original section visibility
               originalSectionVisibilityForFields.set(sectionName, sectionVisible);
-              console.debug('D365 Helper: Saved section', sectionName, 'visibility:', sectionVisible);
 
               try {
                 const sectionControls = section.controls.get();
                 sectionControls.forEach((control: any) => {
                   const controlName = control.getName();
                   controlSectionVisibility.set(controlName, sectionVisible);
-                  console.debug('D365 Helper: Mapped control', controlName, 'to section', sectionName, 'visible:', sectionVisible);
                 });
               } catch (e) {
-                console.debug('D365 Helper: Error getting controls for section', sectionName, e);
+                // Silently ignore errors getting section controls
               }
 
               // Show all sections
               section.setVisible(true);
             });
           });
-
-          console.log('D365 Helper: Saved', originalSectionVisibilityForFields.size, 'section states');
-          console.log('D365 Helper: Control-section map built with', controlSectionVisibility.size, 'entries');
 
           // Second pass: Save field visibility states considering section visibility
           attributes.forEach((attribute: any) => {
@@ -107,17 +100,12 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
               if (sectionVisible !== undefined) {
                 // Field is only actually visible if both field AND section are visible
                 actuallyVisible = actuallyVisible && sectionVisible;
-                console.debug('D365 Helper: Control', controlName, 'field visible:', control.getVisible(), 'section visible:', sectionVisible, 'actual visible:', actuallyVisible);
-              } else {
-                console.debug('D365 Helper: Control', controlName, 'not found in section map, using field visibility only');
               }
 
               originalFieldVisibility.set(controlName, actuallyVisible);
               control.setVisible(true);
             });
           });
-
-          console.log('D365 Helper: Saved visibility state for', originalFieldVisibility.size, 'controls');
         } else {
           // Restore original section visibility first
           const tabs = Xrm.Page.ui.tabs.get();
@@ -128,7 +116,6 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
               const originalState = originalSectionVisibilityForFields.get(sectionName);
               if (originalState !== undefined) {
                 section.setVisible(originalState);
-                console.debug('D365 Helper: Restored section', sectionName, 'to visibility:', originalState);
               }
             });
           });
@@ -168,11 +155,9 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
             sections.forEach((section: any) => {
               const sectionName = section.getName();
               originalSectionVisibilityForSections.set(sectionName, section.getVisible());
-              console.debug('D365 Helper: [TOGGLE_SECTIONS] Saved section', sectionName, 'visibility:', section.getVisible());
               section.setVisible(true);
             });
           });
-          console.log('D365 Helper: [TOGGLE_SECTIONS] Saved', originalSectionVisibilityForSections.size, 'section states');
         } else {
           // Restore original visibility state
           tabs.forEach((tab: any) => {
@@ -182,13 +167,11 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
               const originalState = originalSectionVisibilityForSections.get(sectionName);
               if (originalState !== undefined) {
                 section.setVisible(originalState);
-                console.debug('D365 Helper: [TOGGLE_SECTIONS] Restored section', sectionName, 'to visibility:', originalState);
               }
             });
           });
           // Clear the saved states after restoration
           originalSectionVisibilityForSections.clear();
-          console.log('D365 Helper: [TOGGLE_SECTIONS] Restored and cleared section states');
         }
 
         result = { success: true };
@@ -231,7 +214,6 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
               controls.forEach((control: any) => {
                 try {
                   const controlName = control.getName();
-                  console.log('D365 Helper: Processing lookup control:', controlName);
 
                   // Try multiple selectors to find the control container
                   let controlContainer = document.querySelector(`[data-id="${controlName}"]`);
@@ -243,11 +225,8 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
                   }
 
                   if (controlContainer) {
-                    console.log('D365 Helper: Found container for', controlName);
-
                     // Strategy A: Try to blur anchor tags first (standard lookups)
                     const lookupLinks = controlContainer.querySelectorAll('a');
-                    console.log('D365 Helper: Found', lookupLinks.length, 'anchor tags in', controlName);
 
                     lookupLinks.forEach((link: Element) => {
                       const linkEl = link as HTMLElement;
@@ -255,7 +234,6 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
                         if (!linkEl.classList.contains(blurClass)) {
                           linkEl.classList.add(blurClass);
                           lookupCount++;
-                          console.log('D365 Helper: Blurred link:', linkEl.textContent.trim());
                         }
                       }
                     });
@@ -263,13 +241,10 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
                     // Strategy B: If no anchor tags found, blur specific lookup value containers
                     // Look for elements with specific lookup-related attributes or classes
                     if (lookupLinks.length === 0) {
-                      console.log('D365 Helper: No anchor tags found, trying alternative selectors for', controlName);
-
                       // Try to find elements with lookup-specific attributes
                       const lookupElements = controlContainer.querySelectorAll(
                         '[data-lp-id], [aria-label*="Lookup"], button[aria-label], [role="button"]'
                       );
-                      console.log('D365 Helper: Found', lookupElements.length, 'potential lookup elements in', controlName);
 
                       lookupElements.forEach((el: Element) => {
                         const element = el as HTMLElement;
@@ -280,16 +255,13 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
                           if (!element.classList.contains(blurClass)) {
                             element.classList.add(blurClass);
                             lookupCount++;
-                            console.log('D365 Helper: Blurred lookup element:', text);
                           }
                         }
                       });
                     }
-                  } else {
-                    console.log('D365 Helper: Could not find container for', controlName);
                   }
                 } catch (e) {
-                  console.log('D365 Helper: Error processing control:', e);
+                  // Silently ignore errors processing lookup controls
                 }
               });
             }
@@ -298,17 +270,13 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
           // Strategy 2: Also blur any anchor tags within elements that have data-lp-id or are lookup containers
           // This catches lookups that might not be found via Xrm
           const allLookupLinks = document.querySelectorAll('[data-lp-id] a, [class*="lookup"] a, [class*="Lookup"] a');
-          console.log('D365 Helper: Found', allLookupLinks.length, 'additional lookup links');
 
           allLookupLinks.forEach((link: Element) => {
             const linkEl = link as HTMLElement;
             if (linkEl.textContent && linkEl.textContent.trim().length > 0 && !linkEl.classList.contains(blurClass)) {
               linkEl.classList.add(blurClass);
-              console.log('D365 Helper: Blurred additional link:', linkEl.textContent.trim());
             }
           });
-
-          console.log('D365 Helper: Blurred', inputs.length, 'inputs and', lookupCount, 'lookup elements');
         } else {
           // Remove blur effect
           const blurredElements = document.querySelectorAll(`.${blurClass}`);

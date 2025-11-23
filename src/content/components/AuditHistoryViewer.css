@@ -30,9 +30,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  border-bottom: 2px solid #e5e5e5;
-  background: white;
-  color: #323130;
+  border-bottom: 2px solid #081a33;
+  background: linear-gradient(135deg, #0C274C 0%, #1a3d6b 100%);
+  color: white;
 }
 
 .audit-history-title-section h2 {
@@ -44,36 +44,56 @@
 .audit-history-subtitle {
   margin-top: 4px;
   font-size: 14px;
-  color: #605e5c;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .audit-history-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
-.audit-history-refresh-btn,
-.audit-history-close-btn {
-  background: white;
-  border: 1px solid #d0d0d0;
-  color: #323130;
-  padding: 8px 16px;
-  border-radius: 4px;
+.audit-history-refresh-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: white;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
-.audit-history-refresh-btn:hover,
-.audit-history-close-btn:hover {
-  background: #f3f2f1;
-  border-color: #0078d4;
-  color: #0078d4;
+.audit-history-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(45deg);
 }
 
 .audit-history-close-btn {
-  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: white;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.audit-history-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
 }
 
 .audit-history-filters {

@@ -37,7 +37,6 @@ const isFormPage = (): boolean => {
 const initializeToolbar = () => {
   // Only initialize on form pages
   if (!isFormPage()) {
-    console.log('D365 Helper: Not a form page, skipping toolbar initialization');
     return;
   }
 
@@ -47,11 +46,8 @@ const initializeToolbar = () => {
     const toolbarPosition = result.toolbarPosition || 'top';
 
     if (!showTool) {
-      console.log('D365 Helper: Toolbar is disabled in settings');
       return;
     }
-
-    console.log('D365 Helper: Initializing toolbar on form page');
 
     // Inject the page script first
     injectPageScript();
@@ -80,19 +76,6 @@ const initializeToolbar = () => {
 // Listen for setting changes
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'sync' && (changes.showTool || changes.toolbarPosition || changes.schemaOverlayColor)) {
-    if (changes.showTool) {
-      const newValue = changes.showTool.newValue;
-      console.log('D365 Helper: showTool setting changed to:', newValue);
-    }
-    if (changes.toolbarPosition) {
-      const newValue = changes.toolbarPosition.newValue;
-      console.log('D365 Helper: toolbarPosition setting changed to:', newValue);
-    }
-    if (changes.schemaOverlayColor) {
-      const newValue = changes.schemaOverlayColor.newValue;
-      console.log('D365 Helper: schemaOverlayColor setting changed to:', newValue);
-    }
-
     // Reload the page to apply the setting
     window.location.reload();
   }

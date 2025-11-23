@@ -8,6 +8,7 @@ module.exports = {
     content: './src/content/index.tsx',
     injected: './src/content/injected.ts',
     'webapi-viewer': './src/webapi-viewer/index.tsx',
+    'query-builder': './src/query-builder/index.tsx',
     popup: './src/popup/index.tsx'
   },
   output: {
@@ -44,6 +45,11 @@ module.exports = {
       template: './src/webapi-viewer/index.html',
       filename: 'webapi-viewer.html',
       chunks: ['webapi-viewer']
+    }),
+    new HtmlWebpackPlugin({
+      template: './src/query-builder/index.html',
+      filename: 'query-builder.html',
+      chunks: ['query-builder']
     }),
     new HtmlWebpackPlugin({
       template: './src/popup/index.html',

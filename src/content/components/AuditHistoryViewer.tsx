@@ -78,7 +78,7 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({ data, onClose, 
           </div>
           <div className="audit-history-actions">
             <button onClick={onRefresh} className="audit-history-refresh-btn" title="Refresh audit history">
-              ↻ Refresh
+              ↻
             </button>
             <button onClick={onClose} className="audit-history-close-btn" title="Close">
               ✕

@@ -75,6 +75,12 @@ export class D365Helper {
     return chrome.runtime.getURL(`webapi-viewer.html?url=${encodeURIComponent(apiUrl)}`);
   }
 
+  // Get Query Builder URL
+  getQueryBuilderUrl(): string {
+    const orgUrl = this.getOrgUrl();
+    return chrome.runtime.getURL(`query-builder.html?orgUrl=${encodeURIComponent(orgUrl)}`);
+  }
+
   // Get entity set name (pluralized logical name)
   private getEntitySetName(entityName: string): string {
     // Common irregular plurals

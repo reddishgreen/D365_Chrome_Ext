@@ -6,6 +6,7 @@ import PluginTraceLogViewer, { PluginTraceLogData } from './PluginTraceLogViewer
 import OptionSetsViewer, { OptionSetsData } from './OptionSetsViewer';
 import ODataFieldsViewer, { ODataFieldsData } from './ODataFieldsViewer';
 import AuditHistoryViewer, { AuditHistoryData } from './AuditHistoryViewer';
+import QueryBuilder from '../../query-builder/components/QueryBuilder';
 
 // Toolbar configuration types
 type SectionId = 'fields' | 'sections' | 'schema' | 'navigation' | 'devtools' | 'tools';
@@ -37,6 +38,7 @@ const D365Toolbar: React.FC = () => {
   const [odataFieldsData, setODataFieldsData] = useState<ODataFieldsData | null>(null);
   const [showAuditHistory, setShowAuditHistory] = useState(false);
   const [auditHistoryData, setAuditHistoryData] = useState<AuditHistoryData | null>(null);
+  const [showQueryBuilder, setShowQueryBuilder] = useState(false);
   const [notificationDuration, setNotificationDuration] = useState(3);
   const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('top');
   const [traceLogLimit, setTraceLogLimit] = useState(20);
@@ -372,6 +374,15 @@ const D365Toolbar: React.FC = () => {
     } catch (error) {
       showNotification('Error opening admin center');
     }
+  };
+
+  const handleOpenQueryBuilder = () => {
+    setShowQueryBuilder(true);
+    showNotification('Opening Query Builder...');
+  };
+
+  const handleCloseQueryBuilder = () => {
+    setShowQueryBuilder(false);
   };
 
   const loadPluginTraceLogs = async (openModal: boolean = false) => {
@@ -741,8 +752,9 @@ const D365Toolbar: React.FC = () => {
         const odataFieldsVisible = isButtonVisible('tools.odataFields');
         const auditHistoryVisible = isButtonVisible('tools.auditHistory');
         const formEditorVisible = isButtonVisible('tools.formEditor');
+        const queryBuilderVisible = isButtonVisible('tools.queryBuilder');
         const anyVisible = copyIdVisible || cacheRefreshVisible || webApiVisible || traceLogsVisible || 
-                          jsLibrariesVisible || optionSetsVisible || odataFieldsVisible || auditHistoryVisible || formEditorVisible;
+                          jsLibrariesVisible || optionSetsVisible || odataFieldsVisible || auditHistoryVisible || formEditorVisible || queryBuilderVisible;
         if (!anyVisible) return null;
         return (
           <div key="tools" className="d365-toolbar-section">
@@ -772,6 +784,15 @@ const D365Toolbar: React.FC = () => {
                 title="Open Web API data in new tab"
               >
                 Web API
+              </button>
+            )}
+            {queryBuilderVisible && (
+              <button
+                className="d365-toolbar-btn"
+                onClick={handleOpenQueryBuilder}
+                title="Open Advanced Find"
+              >
+                Advanced Find
               </button>
             )}
             {traceLogsVisible && (
@@ -909,9 +930,15 @@ const D365Toolbar: React.FC = () => {
           onRefresh={handleRefreshAuditHistory}
         />
       )}
+      
+      {showQueryBuilder && (
+        <QueryBuilder
+          orgUrl={helper.getOrgUrl()}
+          onClose={handleCloseQueryBuilder}
+        />
+      )}
     </div>
   );
 };
 
 export default D365Toolbar;
-

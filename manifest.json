@@ -2,9 +2,13 @@
   "manifest_version": 3,
   "name": "D365 Helper - Developer Toolkit",
   "short_name": "D365 Helper",
-  "version": "1.0.3",
+  "version": "1.4",
   "description": "Essential developer toolkit for Microsoft Dynamics 365. Manage fields, view schemas, inspect Web API data & streamline testing.",
   "author": "D365 Developer Tools",
+  "homepage_url": "https://github.com/yourusername/d365-helper-extension",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "permissions": [
     "clipboardWrite",
     "storage"
@@ -48,7 +52,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["webapi-viewer.html", "injected.bundle.js", "icons/RG%20Logo_White_Stacked.svg", "icons/rg_copy.svg"],
+      "resources": ["webapi-viewer.html", "query-builder.html", "injected.bundle.js", "icons/RG%20Logo_White_Stacked.svg", "icons/rg_copy.svg"],
       "matches": [
         "https://*.dynamics.com/*",
         "https://*.crm.dynamics.com/*",
