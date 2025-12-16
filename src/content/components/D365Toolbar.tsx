@@ -115,7 +115,7 @@ const D365Toolbar: React.FC = () => {
       if (rawLabels && typeof rawLabels === 'object') {
         SECTION_IDS.forEach((id) => {
           const value = rawLabels[id];
-          if (typeof value === 'string' && value.trim()) {
+          if (typeof value === 'string') {
             sectionLabels[id] = value.trim();
           }
         });
@@ -198,9 +198,9 @@ const D365Toolbar: React.FC = () => {
 
   const getSectionLabel = useCallback(
     (sectionId: SectionId, fallback: string) => {
-      const raw = toolbarConfig.sectionLabels?.[sectionId] ?? fallback;
-      const trimmed = (raw || '').trim();
-      const base = trimmed || fallback;
+      const override = toolbarConfig.sectionLabels?.[sectionId];
+      const base = override !== undefined ? override.trim() : (fallback || '').trim();
+      if (!base) return '';
       return base.endsWith(':') ? base : `${base}:`;
     },
     [toolbarConfig.sectionLabels]
@@ -793,7 +793,8 @@ const D365Toolbar: React.FC = () => {
   const getButtonsForSection = useCallback(
     (sectionId: SectionId): string[] => {
       const list = toolbarConfig.sectionButtons?.[sectionId];
-      if (Array.isArray(list) && list.length > 0) return list;
+      // IMPORTANT: empty arrays are valid (section intentionally has no buttons)
+      if (Array.isArray(list)) return list;
       return DEFAULT_SECTION_BUTTONS[sectionId] || [];
     },
     [toolbarConfig.sectionButtons]
@@ -1048,11 +1049,10 @@ const D365Toolbar: React.FC = () => {
 
     if (renderedButtons.length === 0) return null;
 
+    const label = getSectionLabel(sectionId, DEFAULT_SECTION_LABELS[sectionId]);
     return (
       <div key={sectionId} className="d365-toolbar-section">
-        <span className="d365-toolbar-section-label">
-          {getSectionLabel(sectionId, DEFAULT_SECTION_LABELS[sectionId])}
-        </span>
+        {label && <span className="d365-toolbar-section-label">{label}</span>}
         {renderedButtons}
       </div>
     );

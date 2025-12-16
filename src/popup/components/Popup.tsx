@@ -183,13 +183,13 @@ const Popup: React.FC = () => {
       seen.add(btn.id);
     });
 
-    // Normalize section label overrides (trim; ignore empties)
+    // Normalize section label overrides (trim; preserve empty strings so users can hide labels)
     const sectionLabels: Partial<Record<SectionId, string>> = {};
     const rawLabels: any = (config as any)?.sectionLabels;
     if (rawLabels && typeof rawLabels === 'object') {
       Object.keys(rawLabels).forEach((key) => {
         const value = rawLabels[key];
-        if (typeof value === 'string' && value.trim()) {
+        if (typeof value === 'string') {
           sectionLabels[key] = value.trim();
         }
       });
@@ -282,18 +282,21 @@ const Popup: React.FC = () => {
     const current = { ...(toolbarConfig.sectionLabels || {}) };
     const isDefaultSection = DEFAULT_SECTION_IDS.includes(sectionId);
 
-    // Store only meaningful overrides. Empty or same-as-default means "use default".
-    if (isDefaultSection) {
-      if (!trimmed || trimmed === defaultLabel) {
-        delete current[sectionId];
-      } else {
-        current[sectionId] = trimmed;
-      }
+    // Allow blank labels. Only "same as default" removes the override.
+    if (isDefaultSection && trimmed === defaultLabel) {
+      delete current[sectionId];
     } else {
-      // Custom sections need a stored label; don't delete it on blank
-      current[sectionId] = trimmed || current[sectionId] || 'New Section';
+      current[sectionId] = trimmed;
     }
 
+    const newConfig: ToolbarConfig = { ...toolbarConfig, sectionLabels: current };
+    setToolbarConfig(newConfig);
+    chrome.storage.sync.set({ toolbarConfig: newConfig });
+  };
+
+  const handleResetSectionLabel = (sectionId: SectionId) => {
+    const current = { ...(toolbarConfig.sectionLabels || {}) };
+    delete current[sectionId];
     const newConfig: ToolbarConfig = { ...toolbarConfig, sectionLabels: current };
     setToolbarConfig(newConfig);
     chrome.storage.sync.set({ toolbarConfig: newConfig });
@@ -821,9 +824,10 @@ const Popup: React.FC = () => {
                 const defaultSection = DEFAULT_SECTIONS.find(s => s.id === sectionId);
                 const isDefaultSection = Boolean(defaultSection);
 
-                const defaultLabel = defaultSection?.label || toolbarConfig.sectionLabels?.[sectionId] || sectionId;
-                const customLabel = toolbarConfig.sectionLabels?.[sectionId] || '';
-                const inputValue = isDefaultSection ? (customLabel || defaultLabel) : (customLabel || defaultLabel);
+                const defaultLabel = defaultSection?.label || sectionId;
+                const storedLabel = toolbarConfig.sectionLabels?.[sectionId];
+                const hasCustomLabel = storedLabel !== undefined;
+                const inputValue = hasCustomLabel ? storedLabel : defaultLabel;
 
                 return (
                   <div
@@ -845,15 +849,15 @@ const Popup: React.FC = () => {
                         className="toolbar-section-card-title"
                         type="text"
                         value={inputValue}
-                        onChange={(e) => handleSectionLabelChange(sectionId, e.target.value, defaultSection?.label || defaultLabel)}
+                        onChange={(e) => handleSectionLabelChange(sectionId, e.target.value, defaultLabel)}
                         aria-label={`${defaultLabel} section name`}
                       />
                       {isDefaultSection ? (
                         <button
                           type="button"
                           className="toolbar-section-card-title-reset"
-                          onClick={() => handleSectionLabelChange(sectionId, '', defaultSection!.label)}
-                          disabled={!customLabel}
+                          onClick={() => handleResetSectionLabel(sectionId)}
+                          disabled={!hasCustomLabel}
                           title="Reset to default section name"
                         >
                           Reset
