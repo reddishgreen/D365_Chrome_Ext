@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './Popup.css';
 
 type TabType = 'features' | 'settings';
 
 // Toolbar customization types
-type SectionId = 'fields' | 'sections' | 'schema' | 'navigation' | 'devtools' | 'tools';
+// NOTE: allow custom user-defined sections (string ids)
+type SectionId = string;
 
 interface ButtonConfig {
   id: string;
@@ -21,6 +22,8 @@ interface SectionConfig {
 interface ToolbarConfig {
   sectionOrder: SectionId[];
   buttonVisibility: Record<string, boolean>;
+  sectionLabels?: Partial<Record<SectionId, string>>;
+  sectionButtons?: Partial<Record<SectionId, string[]>>;
 }
 
 // Default toolbar configuration
@@ -62,7 +65,8 @@ const DEFAULT_SECTIONS: SectionConfig[] = [
       { id: 'devtools.enableEditing', label: 'Enable Editing', description: 'Enable editing for development' },
       { id: 'devtools.testData', label: 'Test Data', description: 'Fill fields with test data' },
       { id: 'devtools.devMode', label: 'Dev Mode', description: 'Toggle Developer Mode' },
-      { id: 'devtools.blurFields', label: 'Blur Fields', description: 'Blur fields for privacy' }
+      { id: 'devtools.blurFields', label: 'Blur Fields', description: 'Blur fields for privacy' },
+      { id: 'devtools.impersonate', label: 'Impersonate', description: 'Impersonate another user for API calls' }
     ]
   },
   {
@@ -72,7 +76,8 @@ const DEFAULT_SECTIONS: SectionConfig[] = [
       { id: 'tools.copyId', label: 'Copy ID', description: 'Copy current record ID' },
       { id: 'tools.cacheRefresh', label: 'Cache Refresh', description: 'Perform hard refresh' },
       { id: 'tools.webApi', label: 'Web API', description: 'Open Web API data' },
-      { id: 'tools.traceLogs', label: 'Trace Logs', description: 'View Plugin Trace Logs' },
+      { id: 'tools.queryBuilder', label: 'Advanced Find', description: 'Open Advanced Find / Query Builder' },
+      { id: 'tools.traceLogs', label: 'Plugin Trace Logs', description: 'View Plugin Trace Logs' },
       { id: 'tools.jsLibraries', label: 'JS Libraries', description: 'View JavaScript libraries' },
       { id: 'tools.optionSets', label: 'Option Sets', description: 'View option set values' },
       { id: 'tools.odataFields', label: 'OData Fields', description: 'View OData field metadata' },
@@ -89,7 +94,12 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
       acc[button.id] = true;
     });
     return acc;
-  }, {} as Record<string, boolean>)
+  }, {} as Record<string, boolean>),
+  sectionLabels: {},
+  sectionButtons: DEFAULT_SECTIONS.reduce((acc, section) => {
+    acc[section.id] = section.buttons.map((b) => b.id);
+    return acc;
+  }, {} as Partial<Record<SectionId, string[]>>)
 };
 
 const Popup: React.FC = () => {
@@ -102,6 +112,91 @@ const Popup: React.FC = () => {
   const [skipPluginsByDefault, setSkipPluginsByDefault] = useState(false);
   const [toolbarConfig, setToolbarConfig] = useState<ToolbarConfig>(DEFAULT_TOOLBAR_CONFIG);
   const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null);
+  const [draggedButton, setDraggedButton] = useState<{ buttonId: string; fromSectionId: SectionId } | null>(null);
+  const [settingsTransferMessage, setSettingsTransferMessage] = useState<string>('');
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const DEFAULT_SECTION_IDS: SectionId[] = ['fields', 'sections', 'schema', 'navigation', 'devtools', 'tools'];
+  const ALL_BUTTONS = DEFAULT_SECTIONS.flatMap((s) => s.buttons);
+  const BUTTON_META = ALL_BUTTONS.reduce((acc, b) => {
+    acc[b.id] = b;
+    return acc;
+  }, {} as Record<string, ButtonConfig>);
+  const DEFAULT_SECTION_BUTTONS: Record<SectionId, string[]> = DEFAULT_SECTIONS.reduce((acc, section) => {
+    acc[section.id] = section.buttons.map((b) => b.id);
+    return acc;
+  }, {} as Record<SectionId, string[]>);
+
+  const normalizeToolbarConfig = (config?: Partial<ToolbarConfig> | null): ToolbarConfig => {
+    const baseOrder = DEFAULT_TOOLBAR_CONFIG.sectionOrder;
+    const rawOrder = Array.isArray(config?.sectionOrder) ? (config!.sectionOrder as SectionId[]) : baseOrder;
+
+    // Allow custom sections: keep any string ids, de-dupe, and ensure all default sections exist
+    const validOrder = rawOrder.filter((id) => typeof id === 'string' && id.trim().length > 0);
+    const dedupedOrder: SectionId[] = [];
+    const seenOrder = new Set<string>();
+    validOrder.forEach((id) => {
+      if (seenOrder.has(id)) return;
+      seenOrder.add(id);
+      dedupedOrder.push(id);
+    });
+
+    const orderSet = new Set(dedupedOrder);
+    const sectionOrder: SectionId[] = [...dedupedOrder, ...baseOrder.filter((id) => !orderSet.has(id))];
+
+    // Merge button visibility (new buttons default to true)
+    const buttonVisibility = {
+      ...DEFAULT_TOOLBAR_CONFIG.buttonVisibility,
+      ...(config?.buttonVisibility || {})
+    };
+
+    // Normalize section button layout (move/reorder buttons between sections)
+    const normalizedSectionButtons: Record<SectionId, string[]> = sectionOrder.reduce((acc, id) => {
+      acc[id] = [];
+      return acc;
+    }, {} as Record<SectionId, string[]>);
+
+    const rawSectionButtons: any = (config as any)?.sectionButtons;
+    const seen = new Set<string>();
+
+    if (rawSectionButtons && typeof rawSectionButtons === 'object') {
+      sectionOrder.forEach((sectionId) => {
+        const list = rawSectionButtons[sectionId];
+        if (!Array.isArray(list)) return;
+
+        list.forEach((buttonId: any) => {
+          if (typeof buttonId !== 'string') return;
+          if (!BUTTON_META[buttonId]) return; // only allow known buttons
+          if (seen.has(buttonId)) return;
+          normalizedSectionButtons[sectionId].push(buttonId);
+          seen.add(buttonId);
+        });
+      });
+    }
+
+    // Add any missing buttons back to their default section
+    ALL_BUTTONS.forEach((btn) => {
+      if (seen.has(btn.id)) return;
+      const defaultSectionId = (DEFAULT_SECTIONS.find((s) => s.buttons.some((b) => b.id === btn.id))?.id ||
+        'tools') as SectionId;
+      normalizedSectionButtons[defaultSectionId].push(btn.id);
+      seen.add(btn.id);
+    });
+
+    // Normalize section label overrides (trim; ignore empties)
+    const sectionLabels: Partial<Record<SectionId, string>> = {};
+    const rawLabels: any = (config as any)?.sectionLabels;
+    if (rawLabels && typeof rawLabels === 'object') {
+      Object.keys(rawLabels).forEach((key) => {
+        const value = rawLabels[key];
+        if (typeof value === 'string' && value.trim()) {
+          sectionLabels[key] = value.trim();
+        }
+      });
+    }
+
+    return { sectionOrder, buttonVisibility, sectionLabels, sectionButtons: normalizedSectionButtons };
+  };
 
   useEffect(() => {
     chrome.storage.sync.get([
@@ -132,7 +227,7 @@ const Popup: React.FC = () => {
         setSkipPluginsByDefault(result.skipPluginsByDefault);
       }
       if (result.toolbarConfig !== undefined) {
-        setToolbarConfig(result.toolbarConfig);
+        setToolbarConfig(normalizeToolbarConfig(result.toolbarConfig));
       }
     });
   }, []);
@@ -182,6 +277,98 @@ const Popup: React.FC = () => {
     chrome.storage.sync.set({ toolbarConfig: newConfig });
   };
 
+  const handleSectionLabelChange = (sectionId: SectionId, value: string, defaultLabel: string) => {
+    const trimmed = value.trim();
+    const current = { ...(toolbarConfig.sectionLabels || {}) };
+    const isDefaultSection = DEFAULT_SECTION_IDS.includes(sectionId);
+
+    // Store only meaningful overrides. Empty or same-as-default means "use default".
+    if (isDefaultSection) {
+      if (!trimmed || trimmed === defaultLabel) {
+        delete current[sectionId];
+      } else {
+        current[sectionId] = trimmed;
+      }
+    } else {
+      // Custom sections need a stored label; don't delete it on blank
+      current[sectionId] = trimmed || current[sectionId] || 'New Section';
+    }
+
+    const newConfig: ToolbarConfig = { ...toolbarConfig, sectionLabels: current };
+    setToolbarConfig(newConfig);
+    chrome.storage.sync.set({ toolbarConfig: newConfig });
+  };
+
+  const getButtonsForSection = (sectionId: SectionId): string[] => {
+    const fromConfig = toolbarConfig.sectionButtons?.[sectionId];
+    // IMPORTANT: empty arrays are valid (section intentionally has no buttons)
+    if (Array.isArray(fromConfig)) return fromConfig;
+    return DEFAULT_SECTION_BUTTONS[sectionId] || [];
+  };
+
+  const setToolbarConfigAndPersist = (next: ToolbarConfig) => {
+    setToolbarConfig(next);
+    chrome.storage.sync.set({ toolbarConfig: next });
+  };
+
+  const setSectionButtons = (sectionButtons: Partial<Record<SectionId, string[]>>) => {
+    setToolbarConfigAndPersist({ ...toolbarConfig, sectionButtons });
+  };
+
+  const handleMoveButton = (buttonId: string, fromSectionId: SectionId, toSectionId: SectionId, toIndex?: number) => {
+    const current: Record<SectionId, string[]> = {
+      ...DEFAULT_SECTION_BUTTONS,
+      ...(toolbarConfig.sectionButtons || {} as any)
+    } as any;
+
+    // Clone arrays
+    const allSectionIds = toolbarConfig.sectionOrder;
+    const next: Record<SectionId, string[]> = allSectionIds.reduce((acc, id) => {
+      acc[id] = [...(current[id] || [])];
+      return acc;
+    }, {} as Record<SectionId, string[]>);
+
+    const fromList = next[fromSectionId];
+    const toList = next[toSectionId];
+
+    const fromIndex = fromList.indexOf(buttonId);
+    if (fromIndex >= 0) {
+      fromList.splice(fromIndex, 1);
+    }
+
+    let insertIndex = typeof toIndex === 'number' ? toIndex : toList.length;
+    if (fromSectionId === toSectionId && fromIndex >= 0 && typeof toIndex === 'number' && fromIndex < toIndex) {
+      insertIndex = Math.max(0, insertIndex - 1);
+    }
+
+    // Prevent duplicates
+    const existingIndex = toList.indexOf(buttonId);
+    if (existingIndex >= 0) {
+      toList.splice(existingIndex, 1);
+      if (existingIndex < insertIndex) insertIndex = Math.max(0, insertIndex - 1);
+    }
+
+    toList.splice(insertIndex, 0, buttonId);
+
+    setSectionButtons(next);
+  };
+
+  const handleButtonDragStart = (sectionId: SectionId, buttonId: string) => {
+    setDraggedButton({ buttonId, fromSectionId: sectionId });
+  };
+
+  const handleButtonDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleButtonDrop = (e: React.DragEvent, toSectionId: SectionId, toIndex?: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedButton) return;
+    handleMoveButton(draggedButton.buttonId, draggedButton.fromSectionId, toSectionId, toIndex);
+    setDraggedButton(null);
+  };
+
   const handleDragStart = (index: number) => {
     setDraggedSectionIndex(index);
   };
@@ -192,6 +379,17 @@ const Popup: React.FC = () => {
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
+
+    // If a button is being dragged, dropping on a section card moves it to that section (append)
+    if (draggedButton) {
+      const toSectionId = toolbarConfig.sectionOrder[dropIndex];
+      if (toSectionId) {
+        handleMoveButton(draggedButton.buttonId, draggedButton.fromSectionId, toSectionId);
+      }
+      setDraggedButton(null);
+      return;
+    }
+
     if (draggedSectionIndex === null) return;
 
     const newOrder = [...toolbarConfig.sectionOrder];
@@ -200,6 +398,157 @@ const Popup: React.FC = () => {
 
     handleSectionOrderChange(newOrder);
     setDraggedSectionIndex(null);
+  };
+
+  const handleAddSection = () => {
+    // Create a stable, human-friendly id like custom-1, custom-2, ...
+    const existing = new Set(toolbarConfig.sectionOrder);
+    let n = 1;
+    while (existing.has(`custom-${n}`)) n++;
+    const id = `custom-${n}`;
+
+    const sectionOrder = [...toolbarConfig.sectionOrder, id];
+    const sectionButtons = { ...(toolbarConfig.sectionButtons || {}), [id]: [] as string[] };
+    const sectionLabels = { ...(toolbarConfig.sectionLabels || {}), [id]: `Custom ${n}` };
+
+    const next: ToolbarConfig = { ...toolbarConfig, sectionOrder, sectionButtons, sectionLabels };
+    setToolbarConfig(next);
+    chrome.storage.sync.set({ toolbarConfig: next });
+  };
+
+  const handleRemoveCustomSection = (sectionId: SectionId) => {
+    if (DEFAULT_SECTION_IDS.includes(sectionId)) return;
+    const confirmed = window.confirm(`Remove section \"${toolbarConfig.sectionLabels?.[sectionId] || sectionId}\"?`);
+    if (!confirmed) return;
+
+    // Move any buttons in this section back to Tools (append)
+    const toolsId = 'tools';
+    const currentButtons = toolbarConfig.sectionButtons?.[sectionId] || [];
+    const nextButtons: any = { ...(toolbarConfig.sectionButtons || {}) };
+    delete nextButtons[sectionId];
+    nextButtons[toolsId] = [...(nextButtons[toolsId] || DEFAULT_SECTION_BUTTONS[toolsId] || []), ...currentButtons];
+
+    const nextLabels: any = { ...(toolbarConfig.sectionLabels || {}) };
+    delete nextLabels[sectionId];
+
+    const sectionOrder = toolbarConfig.sectionOrder.filter((id) => id !== sectionId);
+
+    const next: ToolbarConfig = { ...toolbarConfig, sectionOrder, sectionButtons: nextButtons, sectionLabels: nextLabels };
+    setToolbarConfig(next);
+    chrome.storage.sync.set({ toolbarConfig: next });
+  };
+
+  const handleResetToolbarCustomization = () => {
+    const confirmed = window.confirm(
+      'Reset toolbar customization to defaults?\n\nThis will restore original section names, section order, button layout, and visibility.'
+    );
+    if (!confirmed) return;
+
+    const next = normalizeToolbarConfig(DEFAULT_TOOLBAR_CONFIG);
+    setToolbarConfig(next);
+    chrome.storage.sync.set({ toolbarConfig: next });
+  };
+
+  const handleExportSettings = async () => {
+    setSettingsTransferMessage('');
+    try {
+      const keys = [
+        'showTool',
+        'notificationDuration',
+        'toolbarPosition',
+        'schemaOverlayColor',
+        'traceLogLimit',
+        'skipPluginsByDefault',
+        'toolbarConfig'
+      ];
+
+      const result = await new Promise<any>((resolve) => chrome.storage.sync.get(keys, resolve));
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        extensionVersion: chrome.runtime.getManifest().version,
+        data: {
+          ...result,
+          toolbarConfig: normalizeToolbarConfig(result.toolbarConfig)
+        }
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `d365-helper-settings-${payload.extensionVersion}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setSettingsTransferMessage('Settings exported.');
+    } catch (err: any) {
+      setSettingsTransferMessage(err?.message ? `Export failed: ${err.message}` : 'Export failed.');
+    }
+  };
+
+  const handleImportSettingsClick = () => {
+    setSettingsTransferMessage('');
+    importFileInputRef.current?.click();
+  };
+
+  const handleImportSettingsFile = async (file: File) => {
+    setSettingsTransferMessage('');
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const imported = parsed?.data && typeof parsed.data === 'object' ? parsed.data : parsed;
+
+      if (!imported || typeof imported !== 'object') {
+        throw new Error('Invalid settings file format.');
+      }
+
+      const confirmed = window.confirm('Import settings from file? This will overwrite your current extension settings.');
+      if (!confirmed) return;
+
+      // Only apply known keys
+      const next: any = {};
+      if (typeof imported.showTool === 'boolean') next.showTool = imported.showTool;
+      if (typeof imported.notificationDuration === 'number') next.notificationDuration = imported.notificationDuration;
+      if (imported.toolbarPosition === 'top' || imported.toolbarPosition === 'bottom') next.toolbarPosition = imported.toolbarPosition;
+      if (typeof imported.schemaOverlayColor === 'string') next.schemaOverlayColor = imported.schemaOverlayColor;
+      if (typeof imported.traceLogLimit === 'number') next.traceLogLimit = imported.traceLogLimit;
+      if (typeof imported.skipPluginsByDefault === 'boolean') next.skipPluginsByDefault = imported.skipPluginsByDefault;
+      if (imported.toolbarConfig && typeof imported.toolbarConfig === 'object') {
+        next.toolbarConfig = normalizeToolbarConfig(imported.toolbarConfig);
+      }
+
+      await new Promise<void>((resolve) => chrome.storage.sync.set(next, () => resolve()));
+
+      // Refresh UI state from storage
+      const refreshed = await new Promise<any>((resolve) =>
+        chrome.storage.sync.get(
+          [
+            'showTool',
+            'notificationDuration',
+            'toolbarPosition',
+            'schemaOverlayColor',
+            'traceLogLimit',
+            'skipPluginsByDefault',
+            'toolbarConfig'
+          ],
+          resolve
+        )
+      );
+
+      if (refreshed.showTool !== undefined) setShowTool(refreshed.showTool);
+      if (refreshed.notificationDuration !== undefined) setNotificationDuration(refreshed.notificationDuration);
+      if (refreshed.toolbarPosition !== undefined) setToolbarPosition(refreshed.toolbarPosition);
+      if (refreshed.schemaOverlayColor !== undefined) setSchemaOverlayColor(refreshed.schemaOverlayColor);
+      if (refreshed.traceLogLimit !== undefined) setTraceLogLimit(refreshed.traceLogLimit);
+      if (refreshed.skipPluginsByDefault !== undefined) setSkipPluginsByDefault(refreshed.skipPluginsByDefault);
+      if (refreshed.toolbarConfig !== undefined) setToolbarConfig(normalizeToolbarConfig(refreshed.toolbarConfig));
+
+      setSettingsTransferMessage('Settings imported.');
+    } catch (err: any) {
+      setSettingsTransferMessage(err?.message ? `Import failed: ${err.message}` : 'Import failed.');
+    }
   };
 
   return (
@@ -454,43 +803,145 @@ const Popup: React.FC = () => {
             </section>
 
             <h3 className="settings-section-title">Toolbar Customization</h3>
-            <p className="settings-hint">Drag sections to reorder them. Uncheck buttons to hide them from the toolbar.</p>
+            <p className="settings-hint">
+              Drag sections to reorder them. Drag buttons between sections to regroup them. Uncheck buttons to hide them from the toolbar.
+            </p>
+
+            <div className="toolbar-customization-actions">
+              <button className="settings-transfer-btn" type="button" onClick={handleAddSection}>
+                + Add section
+              </button>
+              <button className="settings-transfer-btn" type="button" onClick={handleResetToolbarCustomization}>
+                Reset layout
+              </button>
+            </div>
 
             <div className="toolbar-customization">
               {toolbarConfig.sectionOrder.map((sectionId, index) => {
-                const section = DEFAULT_SECTIONS.find(s => s.id === sectionId);
-                if (!section) return null;
+                const defaultSection = DEFAULT_SECTIONS.find(s => s.id === sectionId);
+                const isDefaultSection = Boolean(defaultSection);
+
+                const defaultLabel = defaultSection?.label || toolbarConfig.sectionLabels?.[sectionId] || sectionId;
+                const customLabel = toolbarConfig.sectionLabels?.[sectionId] || '';
+                const inputValue = isDefaultSection ? (customLabel || defaultLabel) : (customLabel || defaultLabel);
 
                 return (
                   <div
-                    key={section.id}
+                    key={sectionId}
                     className={`toolbar-section-card ${draggedSectionIndex === index ? 'dragging' : ''}`}
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDrop={(e) => handleDrop(e, index)}
                   >
                     <div className="toolbar-section-card-header">
-                      <span className="drag-handle" aria-hidden="true">&#8942;&#8942;</span>
-                      <span className="toolbar-section-card-title">{section.label}</span>
+                      <span
+                        className="drag-handle"
+                        aria-hidden="true"
+                        draggable
+                        onDragStart={() => handleDragStart(index)}
+                      >
+                        &#8942;&#8942;
+                      </span>
+                      <input
+                        className="toolbar-section-card-title"
+                        type="text"
+                        value={inputValue}
+                        onChange={(e) => handleSectionLabelChange(sectionId, e.target.value, defaultSection?.label || defaultLabel)}
+                        aria-label={`${defaultLabel} section name`}
+                      />
+                      {isDefaultSection ? (
+                        <button
+                          type="button"
+                          className="toolbar-section-card-title-reset"
+                          onClick={() => handleSectionLabelChange(sectionId, '', defaultSection!.label)}
+                          disabled={!customLabel}
+                          title="Reset to default section name"
+                        >
+                          Reset
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="toolbar-section-card-title-reset toolbar-section-card-title-remove"
+                          onClick={() => handleRemoveCustomSection(sectionId)}
+                          title="Remove this custom section"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
-                    <div className="toolbar-section-card-buttons">
-                      {section.buttons.map(button => (
-                        <label key={button.id} className="toolbar-button-checkbox">
-                          <input
-                            type="checkbox"
-                            checked={toolbarConfig.buttonVisibility[button.id] ?? true}
-                            onChange={(e) => handleButtonVisibilityChange(button.id, e.target.checked)}
-                          />
-                          <span className="toolbar-button-label">{button.label}</span>
-                          <span className="toolbar-button-description">{button.description}</span>
-                        </label>
-                      ))}
+                    <div
+                      className="toolbar-section-card-buttons"
+                      onDragOver={handleButtonDragOver}
+                      onDrop={(e) => handleButtonDrop(e, sectionId)}
+                    >
+                      {getButtonsForSection(sectionId).map((buttonId, buttonIndex) => {
+                        const button = BUTTON_META[buttonId];
+                        if (!button) return null;
+
+                        return (
+                          <div
+                            key={button.id}
+                            className="toolbar-button-row"
+                            onDragOver={handleButtonDragOver}
+                            onDrop={(e) => handleButtonDrop(e, sectionId, buttonIndex)}
+                          >
+                            <span
+                              className="drag-handle toolbar-button-drag-handle"
+                              aria-hidden="true"
+                              draggable
+                              onDragStart={() => handleButtonDragStart(sectionId, button.id)}
+                            >
+                              &#8942;&#8942;
+                            </span>
+                            <label className="toolbar-button-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={toolbarConfig.buttonVisibility[button.id] ?? true}
+                                onChange={(e) => handleButtonVisibilityChange(button.id, e.target.checked)}
+                              />
+                              <span className="toolbar-button-label">{button.label}</span>
+                              <span className="toolbar-button-description">{button.description}</span>
+                            </label>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            <h3 className="settings-section-title">Settings Transfer</h3>
+            <section className="info-section">
+              <p className="settings-hint" style={{ marginTop: 0 }}>
+                Export/import your extension settings to move them between Chrome profiles.
+              </p>
+              <div className="settings-transfer-actions">
+                <button className="settings-transfer-btn" type="button" onClick={handleExportSettings}>
+                  Export settings
+                </button>
+                <button className="settings-transfer-btn" type="button" onClick={handleImportSettingsClick}>
+                  Import settings
+                </button>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept="application/json"
+                  className="settings-transfer-file"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      await handleImportSettingsFile(file);
+                    }
+                    // allow selecting the same file again
+                    e.currentTarget.value = '';
+                  }}
+                />
+              </div>
+              {settingsTransferMessage && (
+                <div className="settings-transfer-message">{settingsTransferMessage}</div>
+              )}
+            </section>
           </>
         )}
       </div>

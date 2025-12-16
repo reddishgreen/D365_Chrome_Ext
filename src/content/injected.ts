@@ -1,6 +1,92 @@
 // This script runs in the page context and has access to window.Xrm
 // It communicates with the content script via custom events
 
+// ===== IMPERSONATION INTERCEPTION =====
+// Intercept fetch and XMLHttpRequest to add MSCRMCallerID header when impersonation is active
+
+// Helper to check if URL is a D365 Web API URL
+function isD365ApiUrl(url: string | URL | Request): boolean {
+  const urlString = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+  return urlString.includes('/api/data/') || urlString.includes('/api/');
+}
+
+// Store original fetch
+const originalFetch = window.fetch.bind(window);
+
+// Override fetch to add impersonation header
+(window as any).fetch = async function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const impersonatedUser = (window as any).__d365ImpersonatedUser;
+  
+  if (impersonatedUser && isD365ApiUrl(input)) {
+    // IMPORTANT: D365 often calls fetch(Request) with headers already set on the Request.
+    // If we pass init.headers without including Request.headers, we can accidentally drop
+    // Content-Type / OData headers, which breaks PATCH/POST (exactly the error you saw).
+    const mergedHeaders = new Headers();
+
+    // Preserve headers from Request input
+    if (input instanceof Request) {
+      input.headers.forEach((value, key) => {
+        mergedHeaders.set(key, value);
+      });
+    }
+
+    // Preserve/override headers from init (if provided)
+    if (init?.headers) {
+      const initHeaders = new Headers(init.headers as any);
+      initHeaders.forEach((value, key) => {
+        mergedHeaders.set(key, value);
+      });
+    }
+
+    // Add MSCRMCallerID if not already present
+    if (!mergedHeaders.has('MSCRMCallerID')) {
+      mergedHeaders.set('MSCRMCallerID', impersonatedUser.systemuserid);
+      console.debug('D365 Helper: Adding impersonation header for user:', impersonatedUser.fullname);
+    }
+
+    init = { ...(init || {}), headers: mergedHeaders };
+  }
+  
+  return originalFetch(input, init);
+};
+
+// Store original XMLHttpRequest.open
+const originalXHROpen = XMLHttpRequest.prototype.open;
+const originalXHRSend = XMLHttpRequest.prototype.send;
+
+// Track pending requests that need impersonation header
+const xhrImpersonationMap = new WeakMap<XMLHttpRequest, boolean>();
+
+// Override XMLHttpRequest.open to track API calls
+XMLHttpRequest.prototype.open = function(method: string, url: string | URL, ...args: any[]) {
+  const urlString = typeof url === 'string' ? url : url.href;
+  if (isD365ApiUrl(urlString)) {
+    xhrImpersonationMap.set(this, true);
+  }
+  return originalXHROpen.apply(this, [method, url, ...args] as any);
+};
+
+// Override XMLHttpRequest.send to add impersonation header
+XMLHttpRequest.prototype.send = function(body?: Document | XMLHttpRequestBodyInit | null) {
+  const impersonatedUser = (window as any).__d365ImpersonatedUser;
+  
+  if (impersonatedUser && xhrImpersonationMap.get(this)) {
+    this.setRequestHeader('MSCRMCallerID', impersonatedUser.systemuserid);
+    console.debug('D365 Helper: Adding impersonation header (XHR) for user:', impersonatedUser.fullname);
+  }
+  
+  return originalXHRSend.call(this, body);
+};
+
+console.log('D365 Helper: Fetch/XHR interception initialized for impersonation support');
+
+// Version identifier for debugging
+const INJECTED_SCRIPT_VERSION = '1.5.1-impersonation';
+console.log('[D365 Helper Injected] Script version:', INJECTED_SCRIPT_VERSION);
+console.log('[D365 Helper Injected] Available actions: GET_SYSTEM_USERS, SET_IMPERSONATION, CLEAR_IMPERSONATION, GET_IMPERSONATION_STATUS');
+
+// ===== END IMPERSONATION INTERCEPTION =====
+
 // Store original visibility states
 // Separate maps for TOGGLE_FIELDS and TOGGLE_SECTIONS to avoid conflicts
 const originalFieldVisibility = new Map<string, boolean>();
@@ -10,13 +96,24 @@ const originalSectionVisibilityForSections = new Map<string, boolean>(); // Used
 // Listen for requests from content script
 window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
   const { action, data, requestId } = event.detail;
+  
+  // Debug logging
+  console.log('[D365 Helper Injected] Received action:', action, '| RequestId:', requestId);
 
   try {
     let result: any = null;
 
     const Xrm = (window as any).Xrm;
 
-    const requiresFormContext = action !== 'GET_PLUGIN_TRACE_LOGS' && action !== 'GET_ENVIRONMENT_ID';
+    const requiresFormContext =
+      action !== 'GET_PLUGIN_TRACE_LOGS' &&
+      action !== 'GET_ENVIRONMENT_ID' &&
+      action !== 'GET_SYSTEM_USERS' &&
+      action !== 'SET_IMPERSONATION' &&
+      action !== 'CLEAR_IMPERSONATION' &&
+      action !== 'GET_IMPERSONATION_STATUS';
+    
+    console.log('[D365 Helper Injected] Action requires form context:', requiresFormContext);
 
     if (requiresFormContext && (!Xrm || !Xrm.Page)) {
       throw new Error('Xrm.Page not available');
@@ -394,6 +491,26 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         }
         const allAttrs = Xrm.Page.data.entity.attributes.get();
         const controlInfo: any[] = [];
+        
+        // Also check header section controls if available
+        let headerControls: any[] = [];
+        try {
+          if (Xrm.Page.ui && Xrm.Page.ui.headerSection) {
+            const headerSection = Xrm.Page.ui.headerSection;
+            const headerSections = headerSection.sections ? headerSection.sections.get() : [];
+            headerSections.forEach((section: any) => {
+              try {
+                const sectionControls = section.controls.get();
+                headerControls = headerControls.concat(sectionControls);
+              } catch (e) {
+                console.debug('D365 Helper: Error getting header section controls:', e);
+              }
+            });
+          }
+        } catch (e) {
+          console.debug('D365 Helper: Error accessing header section:', e);
+        }
+        
         allAttrs.forEach((attr: any) => {
           const schemaName = attr.getName();
           const controls = attr.controls.get();
@@ -403,6 +520,7 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
 
               // Try multiple ways to find the element
               let element = document.getElementById(controlName);
+              let elementFound = false;
 
               // If direct ID doesn't work, try using the control's container
               if (!element) {
@@ -419,15 +537,75 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
                 }
               }
 
-              // Only include controls that are visible AND have visible DOM elements
+              // Additional search strategies for header fields and other cases
+              if (!element) {
+                // Try finding by aria-label or aria-describedby
+                const ariaElements = document.querySelectorAll(`[aria-label*="${controlName}"], [aria-describedby*="${controlName}"]`);
+                if (ariaElements.length > 0) {
+                  element = ariaElements[0] as HTMLElement;
+                }
+              }
+
+              if (!element) {
+                // Try finding in header section specifically - use multiple selectors
+                const headerSelectors = [
+                  '[data-id="header"]',
+                  '.ms-crm-Form-Header',
+                  '[class*="header"]',
+                  '[class*="Header"]',
+                  '[id*="header"]',
+                  '[id*="Header"]'
+                ];
+                
+                for (const headerSelector of headerSelectors) {
+                  const headerSection = document.querySelector(headerSelector);
+                  if (headerSection) {
+                    const headerControl = headerSection.querySelector(`[data-id="${controlName}"], [id*="${controlName}"], [data-lp-id="${controlName}"]`);
+                    if (headerControl) {
+                      element = headerControl as HTMLElement;
+                      break;
+                    }
+                  }
+                }
+              }
+
+              // If still not found, try other selectors
+              if (!element) {
+                const fallbackSelectors = [
+                  `[data-lp-id="${controlName}"]`,
+                  `[name="${controlName}"]`,
+                  `input[id*="${controlName}"]`,
+                  `select[id*="${controlName}"]`,
+                  `textarea[id*="${controlName}"]`,
+                  `[data-control-name="${controlName}"]`
+                ];
+                
+                for (const selector of fallbackSelectors) {
+                  const found = document.querySelector(selector);
+                  if (found) {
+                    element = found as HTMLElement;
+                    break;
+                  }
+                }
+              }
+
+              if (element) {
+                elementFound = true;
+              }
+
+              // Include controls that are visible (even if element not found yet, overlay logic will try harder)
+              // For header controls, include them even if visibility check fails (they might be in header section)
               const isVisible = control.getVisible();
-              if (element && isVisible) {
+              const isHeaderControl = headerControls.some((hc: any) => hc.getName && hc.getName() === controlName);
+              
+              if (isVisible || isHeaderControl) {
                 controlInfo.push({
                   schemaName: schemaName,
                   controlName: controlName,
                   label: control.getLabel ? control.getLabel() : schemaName,
                   visible: isVisible,
-                  elementFound: true
+                  elementFound: elementFound,
+                  isHeader: isHeaderControl
                 });
               }
             } catch (e) {
@@ -1836,18 +2014,95 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
         }
         break;
 
+      case 'GET_SYSTEM_USERS':
+        console.log('[D365 Helper Injected] Handling GET_SYSTEM_USERS action');
+        try {
+          // Query enabled system users (not disabled, not application users)
+          const usersQuery = '/api/data/v9.2/systemusers?$select=systemuserid,fullname,domainname,internalemailaddress&$filter=isdisabled eq false and accessmode ne 4&$orderby=fullname asc&$top=500';
+          console.log('[D365 Helper Injected] Querying users from:', usersQuery);
+          
+          const usersResponse = await fetch(usersQuery);
+          console.log('[D365 Helper Injected] Users API response status:', usersResponse.status, usersResponse.statusText);
+          
+          if (!usersResponse.ok) {
+            throw new Error(`Failed to fetch users: ${usersResponse.statusText}`);
+          }
+          
+          const usersData = await usersResponse.json();
+          console.log('[D365 Helper Injected] Successfully fetched', usersData.value?.length || 0, 'users');
+          
+          result = {
+            users: usersData.value || []
+          };
+          console.log('[D365 Helper Injected] GET_SYSTEM_USERS result prepared successfully');
+        } catch (error: any) {
+          console.error('[D365 Helper Injected] Error fetching system users:', error);
+          result = {
+            users: [],
+            error: error.message || 'Failed to fetch system users'
+          };
+        }
+        break;
+
+      case 'SET_IMPERSONATION':
+        try {
+          const { userId, fullname, domainname } = data;
+          if (!userId) {
+            throw new Error('User ID is required');
+          }
+          
+          // Store impersonation state in window
+          (window as any).__d365ImpersonatedUser = {
+            systemuserid: userId,
+            fullname: fullname,
+            domainname: domainname
+          };
+          
+          console.log('D365 Helper: Impersonation set for user:', fullname);
+          result = { success: true, user: (window as any).__d365ImpersonatedUser };
+        } catch (error: any) {
+          console.error('D365 Helper: Error setting impersonation:', error);
+          result = { success: false, error: error.message };
+        }
+        break;
+
+      case 'CLEAR_IMPERSONATION':
+        try {
+          const previousUser = (window as any).__d365ImpersonatedUser;
+          (window as any).__d365ImpersonatedUser = null;
+          console.log('D365 Helper: Impersonation cleared');
+          result = { success: true, previousUser: previousUser };
+        } catch (error: any) {
+          console.error('D365 Helper: Error clearing impersonation:', error);
+          result = { success: false, error: error.message };
+        }
+        break;
+
+      case 'GET_IMPERSONATION_STATUS':
+        result = {
+          isImpersonating: !!(window as any).__d365ImpersonatedUser,
+          user: (window as any).__d365ImpersonatedUser || null
+        };
+        break;
+
       default:
-        throw new Error(`Unknown action: ${action}`);
+        // IMPORTANT: Don't throw error for unknown actions!
+        // This allows newer versions of the script to handle new actions
+        // while old cached versions silently ignore them
+        console.warn('[D365 Helper Injected] Unknown action (ignoring):', action, '| Script version:', INJECTED_SCRIPT_VERSION);
+        return; // Exit without sending a response - let another script handle it
     }
 
     // Send response back to content script
+    console.log('[D365 Helper Injected] Sending SUCCESS response for:', action, '| RequestId:', requestId);
     window.dispatchEvent(new CustomEvent('D365_HELPER_RESPONSE', {
-      detail: { requestId, success: true, result }
+      detail: { requestId, success: true, result, _scriptVersion: INJECTED_SCRIPT_VERSION }
     }));
 
   } catch (error: any) {
+    console.error('[D365 Helper Injected] Sending ERROR response for:', action, '| Error:', error.message, '| RequestId:', requestId);
     window.dispatchEvent(new CustomEvent('D365_HELPER_RESPONSE', {
-      detail: { requestId, success: false, error: error.message }
+      detail: { requestId, success: false, error: error.message, _scriptVersion: INJECTED_SCRIPT_VERSION }
     }));
   }
 });

@@ -490,6 +490,13 @@
   gap: 12px;
 }
 
+.toolbar-customization-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 14px 0;
+}
+
 .toolbar-section-card {
   background: white;
   border: 2px solid #e8eaed;
@@ -538,6 +545,54 @@
   font-weight: 600;
   color: #0C274C;
   letter-spacing: -0.2px;
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 10px;
+  outline: none;
+}
+
+.toolbar-section-card-title:hover {
+  border-color: #e8eaed;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.toolbar-section-card-title:focus {
+  border-color: #0C274C;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(12, 39, 76, 0.12);
+}
+
+.toolbar-section-card-title-reset {
+  border: 1px solid #cdd6e5;
+  background: white;
+  color: #333;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.toolbar-section-card-title-reset:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.toolbar-section-card-title-reset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toolbar-section-card-title-remove {
+  border-color: rgba(220, 38, 38, 0.35);
+  color: #b91c1c;
+}
+
+.toolbar-section-card-title-remove:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.06);
 }
 
 .toolbar-section-card-buttons {
@@ -546,19 +601,40 @@
   gap: 8px;
 }
 
-.toolbar-button-checkbox {
+.toolbar-button-row {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   padding: 10px;
   border-radius: 8px;
-  cursor: pointer;
+  cursor: default;
   transition: all 0.2s ease;
   background: #f8f9fb;
 }
 
-.toolbar-button-checkbox:hover {
+.toolbar-button-row:hover {
   background: rgba(163, 155, 72, 0.08);
+}
+
+.toolbar-button-drag-handle {
+  font-size: 18px;
+  padding-top: 2px;
+}
+
+.toolbar-button-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  flex: 1;
+}
+
+.toolbar-button-checkbox:hover {
+  background: transparent;
 }
 
 .toolbar-button-checkbox input[type="checkbox"] {
@@ -584,4 +660,46 @@
   line-height: 1.4;
   display: block;
   margin-top: 2px;
+}
+
+/* Settings transfer (export/import) */
+.settings-transfer-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.settings-transfer-btn {
+  border: 2px solid #e8eaed;
+  background: white;
+  color: #0C274C;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.settings-transfer-btn:hover {
+  border-color: #A39B48;
+  background: #f8f9fb;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(163, 155, 72, 0.18);
+}
+
+.settings-transfer-file {
+  display: none;
+}
+
+.settings-transfer-message {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #0C274C;
+  font-weight: 600;
+  background: rgba(12, 39, 76, 0.06);
+  border: 1px solid rgba(12, 39, 76, 0.12);
+  padding: 10px 12px;
+  border-radius: 10px;
 }

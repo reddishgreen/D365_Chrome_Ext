@@ -6,9 +6,17 @@ import { setShellContainerOffset } from './utils/shellLayout';
 // Inject the script that has access to window.Xrm
 const injectPageScript = () => {
   const script = document.createElement('script');
-  script.src = chrome.runtime.getURL('injected.bundle.js');
+  // Add cache-busting parameter using extension version
+  const manifest = chrome.runtime.getManifest();
+  const scriptUrl = chrome.runtime.getURL('injected.bundle.js') + '?v=' + manifest.version + '.' + Date.now();
+  console.log('[D365 Helper] Injecting script from:', scriptUrl);
+  script.src = scriptUrl;
   script.onload = () => {
+    console.log('[D365 Helper] Injected script loaded successfully');
     script.remove();
+  };
+  script.onerror = (err) => {
+    console.error('[D365 Helper] Failed to load injected script:', err);
   };
   (document.head || document.documentElement).appendChild(script);
 };

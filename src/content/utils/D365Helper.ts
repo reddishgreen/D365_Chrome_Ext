@@ -1,24 +1,46 @@
 export class D365Helper {
   private overlayElements: HTMLElement[] = [];
   private requestCounter = 0;
+  private headerObserver: MutationObserver | null = null;
+  private headerFieldsInfo: any[] = [];
+  private overlayColor: string = '#0078d4';
 
   constructor() {
     // Communication happens via custom events with injected script
   }
 
   // Send request to injected script and wait for response
-  private async sendRequest(action: string, data?: any): Promise<any> {
+  private async sendRequest(
+    action: string,
+    data?: any,
+    options?: { timeoutMs?: number; silent?: boolean }
+  ): Promise<any> {
     return new Promise((resolve, reject) => {
       const requestId = `req_${this.requestCounter++}_${Date.now()}`;
+      const timeoutMs = options?.timeoutMs ?? 5000;
+      const silent = options?.silent ?? false;
 
       const timeout = setTimeout(() => {
         window.removeEventListener('D365_HELPER_RESPONSE', responseHandler);
+        // Avoid noisy console errors for expected timeouts (e.g., during extension reloads)
+        if (!silent) {
+          console.warn('[D365 Helper] Request timeout:', action);
+        }
         reject(new Error('Request timeout'));
-      }, 5000);
+      }, timeoutMs);
 
       const responseHandler = (event: any) => {
         const response = event.detail;
         if (response.requestId === requestId) {
+          // Ignore responses from old scripts that don't include a version marker.
+          // This prevents cached scripts from racing and causing false errors.
+          if (!response._scriptVersion) {
+            if (!silent) {
+              console.debug('[D365 Helper] Ignoring response from old injected script (no version).');
+            }
+            return; // Keep waiting for a versioned response
+          }
+
           clearTimeout(timeout);
           window.removeEventListener('D365_HELPER_RESPONSE', responseHandler);
 
@@ -32,9 +54,11 @@ export class D365Helper {
 
       window.addEventListener('D365_HELPER_RESPONSE', responseHandler);
 
-      window.dispatchEvent(new CustomEvent('D365_HELPER_REQUEST', {
-        detail: { action, data, requestId }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('D365_HELPER_REQUEST', {
+          detail: { action, data, requestId }
+        })
+      );
     });
   }
 
@@ -298,6 +322,10 @@ export class D365Helper {
 
       const processedContainers = new Set<HTMLElement>();
       const processedSchemaNames = new Set<string>();
+      
+      // Store unfound fields for later (when they become visible, e.g., header flyout opens)
+      const unfoundFields: any[] = [];
+      this.overlayColor = overlayColor;
 
       controlInfo.forEach((info: any) => {
         try {
@@ -312,58 +340,150 @@ export class D365Helper {
 
           if (!controlElement) {
             // Try with data-id attribute
-            controlElement = document.querySelector(`[data-id="${info.controlName}"]`);
+            controlElement = document.querySelector(`[data-id="${info.controlName}"]`) as HTMLElement;
           }
 
           if (!controlElement) {
             // Try partial ID match
-            controlElement = document.querySelector(`[id*="${info.controlName}"]`);
+            controlElement = document.querySelector(`[id*="${info.controlName}"]`) as HTMLElement;
+          }
+
+          // Additional search strategies for header fields and other cases
+          if (!controlElement) {
+            // Try finding by aria-label or aria-describedby that might contain the control name
+            const ariaElements = document.querySelectorAll(`[aria-label*="${info.controlName}"], [aria-describedby*="${info.controlName}"]`);
+            if (ariaElements.length > 0) {
+              controlElement = ariaElements[0] as HTMLElement;
+            }
+          }
+
+          if (!controlElement) {
+            // Try finding in header section specifically - use multiple selectors
+            const headerSelectors = [
+              '[data-id="header"]',
+              '.ms-crm-Form-Header',
+              '[class*="header"]',
+              '[class*="Header"]',
+              '[id*="header"]',
+              '[id*="Header"]',
+              '[class*="form-header"]',
+              '[class*="FormHeader"]'
+            ];
+            
+            for (const headerSelector of headerSelectors) {
+              const headerSection = document.querySelector(headerSelector);
+              if (headerSection) {
+                const headerControl = headerSection.querySelector(
+                  `[data-id="${info.controlName}"], [id*="${info.controlName}"], [data-lp-id="${info.controlName}"], [data-control-name="${info.controlName}"]`
+                );
+                if (headerControl) {
+                  controlElement = headerControl as HTMLElement;
+                  break;
+                }
+              }
+            }
+          }
+
+          // If still not found, try to find any element with the control name in various attributes
+          if (!controlElement) {
+            const fallbackSelectors = [
+              `[data-lp-id="${info.controlName}"]`,
+              `[name="${info.controlName}"]`,
+              `input[id*="${info.controlName}"]`,
+              `select[id*="${info.controlName}"]`,
+              `textarea[id*="${info.controlName}"]`,
+              `[data-control-name="${info.controlName}"]`
+            ];
+            
+            for (const selector of fallbackSelectors) {
+              const found = document.querySelector(selector);
+              if (found) {
+                controlElement = found as HTMLElement;
+                break;
+              }
+            }
           }
 
           if (controlElement) {
-            // Find the proper field container, avoiding lookup value containers
+            // Helper function to check if element is visible
+            const isVisible = (elem: HTMLElement): boolean => {
+              const style = window.getComputedStyle(elem);
+              return style.display !== 'none' && 
+                     style.visibility !== 'hidden' && 
+                     style.opacity !== '0' &&
+                     elem.offsetWidth > 0 && 
+                     elem.offsetHeight > 0;
+            };
+            
+            // Find the proper field container - prioritize smaller, visible containers
             let container: HTMLElement | null = null;
 
-            // First try to find the field section container with data-id matching the control
-            const dataIdContainer = controlElement.closest(`[data-id="${info.controlName}"]`);
-            if (dataIdContainer) {
-              container = dataIdContainer as HTMLElement;
-            } else {
-              // Try other standard containers, but avoid lookup-specific elements
-              const candidates = [
-                controlElement.closest('.control-container'),
-                controlElement.closest('[data-control-name]'),
-                controlElement.closest('div[role="group"]'),
-                controlElement.closest('[data-id]')
-              ];
+            // Strategy: Find the smallest visible container that contains the control
+            const containerCandidates = [
+              // Most specific - direct data-id container
+              controlElement.closest(`[data-id="${info.controlName}"]`),
+              controlElement.closest('[data-id]'),
+              // Field/control specific containers
+              controlElement.closest('[class*="field"][class*="container"]'),
+              controlElement.closest('[class*="control"][class*="container"]'),
+              controlElement.closest('[class*="Field"][class*="Container"]'),
+              controlElement.closest('[class*="Control"][class*="Container"]'),
+              // Generic field containers
+              controlElement.closest('[class*="field"]'),
+              controlElement.closest('[class*="Field"]'),
+              controlElement.closest('[class*="control"]'),
+              controlElement.closest('[class*="Control"]'),
+              // Role-based containers
+              controlElement.closest('div[role="group"]'),
+              controlElement.closest('[data-control-name]'),
+              // Header-specific containers (but only if they're not too large)
+              controlElement.closest('.ms-crm-Form-Header'),
+              controlElement.closest('[class*="header"]'),
+              controlElement.closest('[class*="Header"]'),
+              // Section containers
+              controlElement.closest('.ms-crm-FormSection'),
+              controlElement.closest('.ms-crm-FormBody'),
+              // Parent elements
+              controlElement.parentElement,
+              controlElement.parentElement?.parentElement
+            ].filter(c => c !== null) as HTMLElement[];
 
-              for (const candidate of candidates) {
-                if (candidate) {
-                  const elem = candidate as HTMLElement;
-                  // Skip if this looks like a lookup value container
-                  const classList = elem.classList.toString();
-                  const hasLookupClass = classList.includes('lookup') ||
-                                        classList.includes('ms-crm-Inline-Value') ||
-                                        classList.includes('ms-crm-Inline-Item');
-
-                  // Skip if it's inside a lookup value display
-                  const isInLookupValue = elem.closest('.ms-crm-Inline-Value, .ms-crm-Inline-Item, [class*="lookupValue"]');
-
-                  if (!hasLookupClass && !isInLookupValue) {
-                    container = elem;
-                    break;
-                  }
-                }
+            // Find the smallest visible container that's not too large
+            for (const candidate of containerCandidates) {
+              if (!candidate || !isVisible(candidate)) continue;
+              
+              // Skip if container is too large (likely a page-level container)
+              const rect = candidate.getBoundingClientRect();
+              if (rect.width > window.innerWidth * 0.9 || rect.height > window.innerHeight * 0.9) {
+                continue;
               }
+              
+              // Skip if it's a lookup value container
+              const classList = candidate.classList.toString();
+              const hasLookupClass = classList.includes('lookup') ||
+                                    classList.includes('ms-crm-Inline-Value') ||
+                                    classList.includes('ms-crm-Inline-Item');
 
-              // Fallback to parent if no suitable container found
-              if (!container) {
-                container = controlElement.parentElement;
+              // Skip if it's inside a lookup value display
+              const isInLookupValue = candidate.closest('.ms-crm-Inline-Value, .ms-crm-Inline-Item, [class*="lookupValue"]');
+
+              if (!hasLookupClass && !isInLookupValue) {
+                // Prefer smaller containers
+                if (!container || 
+                    (candidate.contains(controlElement) && 
+                     candidate.getBoundingClientRect().width < container.getBoundingClientRect().width)) {
+                  container = candidate;
+                }
               }
             }
 
-            if (container) {
-              const parentElement = container as HTMLElement;
+            // Fallback to parent if no suitable container found
+            if (!container) {
+              container = controlElement.parentElement;
+            }
+
+            if (container && isVisible(container)) {
+              const parentElement = container;
 
               if (processedContainers.has(parentElement)) {
                 console.debug('D365 Helper: Container already processed for', info.schemaName);
@@ -421,9 +541,11 @@ export class D365Helper {
               console.debug('D365 Helper: Created overlay for', info.schemaName);
             } else {
               console.debug('D365 Helper: No container found for', info.controlName);
+              unfoundFields.push(info);
             }
           } else {
             console.debug('D365 Helper: Element not found for', info.controlName);
+            unfoundFields.push(info);
           }
         } catch (error) {
           console.debug('D365 Helper: Error creating overlay for', info.controlName, error);
@@ -431,13 +553,222 @@ export class D365Helper {
       });
 
       console.log('D365 Helper: Created', this.overlayElements.length, 'overlays');
+      console.log('D365 Helper:', unfoundFields.length, 'fields not found (may be in header flyout)');
+      
+      // Store unfound fields and set up observer
+      if (unfoundFields.length > 0) {
+        this.headerFieldsInfo = unfoundFields;
+        this.setupHeaderFlyoutObserver(bgColor, processedContainers, processedSchemaNames);
+      }
     } catch (error) {
       console.error('Error showing schema overlay:', error);
     }
   }
 
+  // Set up observer to watch for unfound fields becoming visible (e.g., header flyout opening)
+  private setupHeaderFlyoutObserver(bgColor: string, processedContainers: Set<HTMLElement>, processedSchemaNames: Set<string>): void {
+    // Clean up existing observer
+    if (this.headerObserver) {
+      this.headerObserver.disconnect();
+      this.headerObserver = null;
+    }
+
+    // Helper function to check if element is visible
+    const isVisible = (elem: HTMLElement): boolean => {
+      const style = window.getComputedStyle(elem);
+      const rect = elem.getBoundingClientRect();
+      return style.display !== 'none' && 
+             style.visibility !== 'hidden' && 
+             style.opacity !== '0' &&
+             rect.width > 0 && 
+             rect.height > 0;
+    };
+
+    // Function to try creating overlays for unfound fields
+    const tryCreateOverlaysForUnfoundFields = () => {
+      if (this.headerFieldsInfo.length === 0) return;
+
+      console.log('D365 Helper: Checking for', this.headerFieldsInfo.length, 'unfound fields');
+      
+      const stillUnfound: any[] = [];
+
+      this.headerFieldsInfo.forEach((info: any) => {
+        try {
+          if (processedSchemaNames.has(info.schemaName)) {
+            return;
+          }
+
+          // Try to find the control element
+          const selectors = [
+            `[data-id="${info.controlName}"]`,
+            `[id="${info.controlName}"]`,
+            `[id*="${info.controlName}"]`,
+            `[data-lp-id="${info.controlName}"]`,
+            `[data-control-name="${info.controlName}"]`
+          ];
+
+          let controlElement: HTMLElement | null = null;
+          for (const sel of selectors) {
+            try {
+              const found = document.querySelector(sel);
+              if (found && isVisible(found as HTMLElement)) {
+                controlElement = found as HTMLElement;
+                break;
+              }
+            } catch (e) {
+              // Selector might be invalid
+            }
+          }
+
+          if (!controlElement) {
+            stillUnfound.push(info);
+            return;
+          }
+
+          // Find the smallest visible container
+          const containerCandidates = [
+            controlElement.closest(`[data-id="${info.controlName}"]`),
+            controlElement.closest('[data-id]'),
+            controlElement.closest('[class*="field"]'),
+            controlElement.closest('[class*="Field"]'),
+            controlElement.closest('[class*="control"]'),
+            controlElement.closest('[class*="Control"]'),
+            controlElement.closest('div[role="group"]'),
+            controlElement.parentElement
+          ].filter(c => c !== null) as HTMLElement[];
+
+          let container: HTMLElement | null = null;
+          for (const candidate of containerCandidates) {
+            if (!candidate || !isVisible(candidate)) continue;
+            
+            // Skip if too large
+            const rect = candidate.getBoundingClientRect();
+            if (rect.width > window.innerWidth * 0.8 || rect.height > window.innerHeight * 0.8) {
+              continue;
+            }
+            
+            // Skip lookup containers
+            const classes = candidate.className || '';
+            if (classes.includes('Inline-Value') || classes.includes('Inline-Item') || classes.includes('lookupValue')) {
+              continue;
+            }
+
+            container = candidate;
+            break;
+          }
+
+          if (!container) {
+            container = controlElement.parentElement;
+          }
+
+          if (!container || processedContainers.has(container)) {
+            stillUnfound.push(info);
+            return;
+          }
+
+          // Check visibility again
+          if (!isVisible(container)) {
+            stillUnfound.push(info);
+            return;
+          }
+
+          processedContainers.add(container);
+          processedSchemaNames.add(info.schemaName);
+
+          const overlay = document.createElement('div');
+          overlay.className = 'd365-schema-overlay d365-schema-overlay-header';
+          overlay.textContent = info.schemaName;
+          overlay.title = `Schema Name: ${info.schemaName}\nLabel: ${info.label}\nClick to copy`;
+          overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: ${bgColor};
+            color: white;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            border-radius: 0 0 4px 0;
+            z-index: 99999;
+            cursor: pointer;
+            pointer-events: auto;
+          `;
+
+          overlay.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await navigator.clipboard.writeText(info.schemaName);
+            overlay.textContent = '✓ Copied!';
+            setTimeout(() => {
+              overlay.textContent = info.schemaName;
+            }, 1000);
+          });
+
+          const originalPosition = window.getComputedStyle(container).position;
+          if (originalPosition === 'static') {
+            container.style.position = 'relative';
+          }
+
+          container.appendChild(overlay);
+          this.overlayElements.push(overlay);
+          console.log('D365 Helper: Created overlay for previously unfound field:', info.schemaName);
+        } catch (error) {
+          stillUnfound.push(info);
+          console.debug('D365 Helper: Error creating overlay for unfound field:', info.schemaName, error);
+        }
+      });
+
+      // Update the list of still-unfound fields
+      this.headerFieldsInfo = stillUnfound;
+      
+      if (stillUnfound.length === 0 && this.headerObserver) {
+        console.log('D365 Helper: All fields found, disconnecting observer');
+        this.headerObserver.disconnect();
+        this.headerObserver = null;
+      }
+    };
+
+    // Set up MutationObserver to watch for DOM changes
+    this.headerObserver = new MutationObserver((mutations) => {
+      // Debounce - only check after DOM settles
+      setTimeout(tryCreateOverlaysForUnfoundFields, 150);
+    });
+
+    // Observe the document body for changes
+    this.headerObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'aria-expanded', 'aria-hidden', 'hidden']
+    });
+
+    // Also set up periodic check (in case mutation observer misses something)
+    const checkInterval = setInterval(() => {
+      if (this.headerFieldsInfo.length === 0) {
+        clearInterval(checkInterval);
+        return;
+      }
+      tryCreateOverlaysForUnfoundFields();
+    }, 1000);
+
+    // Stop checking after 30 seconds
+    setTimeout(() => {
+      clearInterval(checkInterval);
+    }, 30000);
+
+    console.log('D365 Helper: Observer set up for', this.headerFieldsInfo.length, 'unfound fields');
+  }
+
   // Hide schema name overlay
   private hideSchemaOverlay(): void {
+    // Clean up header observer
+    if (this.headerObserver) {
+      this.headerObserver.disconnect();
+      this.headerObserver = null;
+    }
+    
+    // Clear header fields info
+    this.headerFieldsInfo = [];
+    
     // Remove all overlays from DOM
     this.overlayElements.forEach(overlay => {
       try {
@@ -488,6 +819,47 @@ export class D365Helper {
     } catch (error) {
       console.error('Error getting audit history:', error);
       throw error;
+    }
+  }
+
+  // ===== IMPERSONATION METHODS =====
+
+  // Get list of system users for impersonation selector
+  async getSystemUsers(): Promise<any> {
+    try {
+      return await this.sendRequest('GET_SYSTEM_USERS');
+    } catch (error) {
+      console.error('Error getting system users:', error);
+      throw error;
+    }
+  }
+
+  // Set impersonation for a specific user
+  async setImpersonation(userId: string, fullname: string, domainname: string): Promise<any> {
+    try {
+      return await this.sendRequest('SET_IMPERSONATION', { userId, fullname, domainname });
+    } catch (error) {
+      console.error('Error setting impersonation:', error);
+      throw error;
+    }
+  }
+
+  // Clear impersonation and return to original user
+  async clearImpersonation(): Promise<any> {
+    try {
+      return await this.sendRequest('CLEAR_IMPERSONATION');
+    } catch (error) {
+      console.error('Error clearing impersonation:', error);
+      throw error;
+    }
+  }
+
+  // Check current impersonation status
+  async getImpersonationStatus(): Promise<{ isImpersonating: boolean; user: any | null }> {
+    try {
+      return await this.sendRequest('GET_IMPERSONATION_STATUS', undefined, { silent: true, timeoutMs: 1500 });
+    } catch (error) {
+      return { isImpersonating: false, user: null };
     }
   }
 }

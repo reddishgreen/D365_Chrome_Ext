@@ -85,7 +85,8 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
           <span>Value</span>
           <span>Label</span>
           <span className="d365-options-head-center" title="Copy Value Only">Value</span>
-          <span className="d365-options-head-center" title="Copy Value & Label">Label</span>
+          <span className="d365-options-head-center" title="Copy Label Only">Label</span>
+          <span className="d365-options-head-center" title="Copy Value & Label">Both</span>
         </div>
         {attribute.options.map((option, index) => {
           const key = `${attribute.logicalName}-${option.value}`;
@@ -125,6 +126,21 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
               </button>
               <button
                 className="d365-options-copy-btn"
+                onClick={() => handleCopy(option.label, `${key}-label`)}
+                title="Copy label only"
+              >
+                {copiedKey === `${key}-label` ? (
+                  <span className="d365-copy-success">✓</span>
+                ) : (
+                  <img
+                    src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                    alt="Copy Label"
+                    className="d365-copy-icon"
+                  />
+                )}
+              </button>
+              <button
+                className="d365-options-copy-btn"
                 onClick={() => handleCopy(`${option.value} - ${option.label}`, `${key}-full`)}
                 title="Copy value and label"
               >
@@ -133,7 +149,7 @@ const OptionSetsViewer: React.FC<OptionSetsViewerProps> = ({ data, onClose, onRe
                 ) : (
                   <img
                     src={chrome.runtime.getURL('icons/rg_copy.svg')}
-                    alt="Copy Label"
+                    alt="Copy Both"
                     className="d365-copy-icon"
                   />
                 )}

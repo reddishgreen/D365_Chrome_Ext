@@ -90,6 +90,8 @@
 .d365-toolbar-section {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
+  flex-shrink: 0; /* Prevent section compression that causes label wrapping */
   gap: 6px;
   padding: 4px 8px;
   background: rgba(255, 255, 255, 0.1);
@@ -101,6 +103,7 @@
   font-weight: 500;
   opacity: 0.9;
   margin-right: 4px;
+  white-space: nowrap; /* Prevent "Dev Tools:" from wrapping */
 }
 
 .d365-toolbar-btn {
@@ -132,6 +135,96 @@
   background: #ffd200 !important;
   color: #000 !important;
   font-weight: 600;
+}
+
+.d365-toolbar-btn-dev-mode {
+  background: #ffb3ba !important;
+  color: #000 !important;
+}
+
+.d365-toolbar-btn-dev-mode:hover {
+  background: #ff9ca3 !important;
+}
+
+.d365-toolbar-btn-dev-mode.d365-toolbar-btn-active {
+  background: #ff8a95 !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+
+/* Impersonate button styling */
+.d365-toolbar-btn-impersonate {
+  background: #ff9800 !important;
+  color: #000 !important;
+}
+
+.d365-toolbar-btn-impersonate:hover {
+  background: #f57c00 !important;
+}
+
+/* Impersonation indicator in toolbar */
+.d365-impersonate-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  color: white;
+  /* Keep it the same height as toolbar buttons and prevent label wrapping */
+  height: 28px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  animation: d365-impersonate-pulse 2s infinite;
+}
+
+@keyframes d365-impersonate-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 152, 0, 0);
+  }
+}
+
+.d365-impersonate-indicator-label {
+  opacity: 0.9;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.d365-impersonate-indicator-user {
+  font-weight: 600;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.d365-impersonate-indicator-cancel {
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.d365-impersonate-indicator-cancel:hover {
+  background: rgba(0, 0, 0, 0.4);
+  transform: scale(1.1);
 }
 
 .d365-toolbar-actions {
@@ -721,15 +814,197 @@
   transition: all 0.2s ease;
 }
 
-.d365-trace-refresh:hover {
+.d365-trace-refresh:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.3);
   transform: rotate(45deg);
+}
+
+.d365-trace-refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.d365-trace-clear {
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.d365-trace-clear:hover:not(:disabled) {
+  /* Non-destructive "clear view" */
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.d365-trace-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .d365-trace-tabs {
   display: flex;
   background: white;
   border-bottom: 1px solid #ddd;
+}
+
+/* Trace log filters */
+.d365-trace-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f7f9fc;
+  border-bottom: 1px solid #e1e6ef;
+}
+
+.d365-trace-filter-toggle {
+  border: 1px solid #cdd6e5;
+  background: white;
+  color: #0C274C;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.d365-trace-filter-toggle:hover {
+  background: rgba(12, 39, 76, 0.06);
+}
+
+.d365-trace-filter-summary {
+  font-size: 12px;
+  color: #333;
+}
+
+.d365-trace-filter-summary strong {
+  color: #0C274C;
+}
+
+.d365-trace-filter-clear-btn {
+  margin-left: auto;
+  border: 1px solid #cdd6e5;
+  background: white;
+  color: #333;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.d365-trace-filter-clear-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.d365-trace-filter-clear-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.d365-trace-filter-panel {
+  padding: 12px 14px 10px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e6ef;
+}
+
+.d365-trace-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 10px 12px;
+}
+
+.d365-trace-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.d365-trace-filter-field label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0C274C;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.d365-trace-filter-field input[type="text"],
+.d365-trace-filter-field input[type="number"],
+.d365-trace-filter-field input[type="datetime-local"] {
+  border: 1px solid #cdd6e5;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  outline: none;
+  background: #fff;
+}
+
+.d365-trace-filter-field input:focus {
+  border-color: #0C274C;
+  box-shadow: 0 0 0 3px rgba(12, 39, 76, 0.12);
+}
+
+.d365-trace-filter-quick-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.d365-trace-filter-quick-buttons button {
+  border: 1px solid #cdd6e5;
+  background: #fff;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.d365-trace-filter-quick-buttons button:hover {
+  background: rgba(12, 39, 76, 0.06);
+}
+
+.d365-trace-filter-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 0 0;
+}
+
+.d365-trace-filter-checks label,
+.d365-trace-filter-check label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #333;
+  font-weight: 500;
+}
+
+.d365-trace-filter-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.d365-trace-filter-range span {
+  color: #666;
+  font-size: 12px;
+}
+
+.d365-trace-filter-wide {
+  grid-column: span 2;
+}
+
+.d365-trace-filter-note {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #666;
 }
 
 .d365-trace-tab {
@@ -1074,6 +1349,14 @@
   .d365-trace-details-panel-wrapper {
     flex: 1;
   }
+
+  .d365-trace-filter-grid {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .d365-trace-filter-wide {
+    grid-column: span 2;
+  }
 }
 
 .d365-options-modal {
@@ -1213,7 +1496,7 @@
 .d365-options-table-head,
 .d365-options-table-row {
   display: grid;
-  grid-template-columns: 120px 1fr 60px 60px;
+  grid-template-columns: 120px 1fr 60px 60px 60px;
   gap: 12px;
   align-items: center;
   padding: 10px 18px;
