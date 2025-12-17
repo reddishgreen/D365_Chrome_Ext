@@ -86,6 +86,7 @@ const D365Toolbar: React.FC = () => {
   const allFieldsVisibleRef = useRef(allFieldsVisible);
   const allSectionsVisibleRef = useRef(allSectionsVisible);
   const fieldsBlurredRef = useRef(fieldsBlurred);
+  const devModeActiveRef = useRef(devModeActive);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const helperRef = useRef<D365Helper | null>(null);
 
@@ -249,8 +250,77 @@ const D365Toolbar: React.FC = () => {
   }, [fieldsBlurred]);
 
   useEffect(() => {
+    devModeActiveRef.current = devModeActive;
+  }, [devModeActive]);
+
+  useEffect(() => {
     const { history } = window;
     let lastUrl = window.location.href;
+    let devModeReapplyTimeout: number | undefined;
+    let devModeReapplyAttempts = 0;
+    let devModeReapplyInProgress = false;
+    const MAX_DEV_MODE_REAPPLY_ATTEMPTS = 3;
+
+    const clearDevModeReapplyTimeout = () => {
+      if (devModeReapplyTimeout !== undefined) {
+        window.clearTimeout(devModeReapplyTimeout);
+        devModeReapplyTimeout = undefined;
+      }
+    };
+
+    const scheduleDevModeReapply = (delayMs: number = 900) => {
+      clearDevModeReapplyTimeout();
+      devModeReapplyTimeout = window.setTimeout(() => {
+        void reapplyDevModeAfterNavigation();
+      }, delayMs);
+    };
+
+    const reapplyDevModeAfterNavigation = async () => {
+      if (!devModeActiveRef.current) return;
+      if (devModeReapplyInProgress) return;
+      devModeReapplyInProgress = true;
+
+      try {
+        // Dev Mode should re-apply on each form navigation so the button state always matches reality.
+        await helper.toggleAllFields(true);
+        await helper.toggleAllSections(true);
+        allFieldsVisibleRef.current = true;
+        allSectionsVisibleRef.current = true;
+        setAllFieldsVisible(true);
+        setAllSectionsVisible(true);
+
+        await helper.unlockFields();
+        await helper.disableFieldRequirements();
+
+        // Wait for DOM updates after showing fields/sections, then re-create overlays
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await helper.toggleSchemaOverlay(true);
+        showSchemaNamesRef.current = true;
+        setShowSchemaNames(true);
+
+        devModeReapplyAttempts = 0;
+      } catch (error) {
+        devModeReapplyAttempts += 1;
+        if (devModeReapplyAttempts <= MAX_DEV_MODE_REAPPLY_ATTEMPTS) {
+          // Form may still be loading; retry with a small backoff.
+          const backoff = 600 + devModeReapplyAttempts * 500;
+          scheduleDevModeReapply(backoff);
+        } else {
+          // Give up and reset Dev Mode so the UI never stays "stuck" active.
+          console.warn('D365 Helper: Dev Mode reapply failed after navigation; resetting Dev Mode.', error);
+          devModeActiveRef.current = false;
+          showSchemaNamesRef.current = false;
+          allFieldsVisibleRef.current = false;
+          allSectionsVisibleRef.current = false;
+          setDevModeActive(false);
+          setShowSchemaNames(false);
+          setAllFieldsVisible(false);
+          setAllSectionsVisible(false);
+        }
+      } finally {
+        devModeReapplyInProgress = false;
+      }
+    };
 
     const resetSchemaOverlay = () => {
       if (!showSchemaNamesRef.current) {
@@ -304,9 +374,14 @@ const D365Toolbar: React.FC = () => {
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
-        resetSchemaOverlay();
-        resetFieldsVisibility();
-        resetSectionsVisibility();
+        if (devModeActiveRef.current) {
+          // Keep Dev Mode on, but re-apply it for the newly loaded form.
+          scheduleDevModeReapply(900);
+        } else {
+          resetSchemaOverlay();
+          resetFieldsVisibility();
+          resetSectionsVisibility();
+        }
         resetFieldsBlur();
       }
     };
@@ -352,6 +427,7 @@ const D365Toolbar: React.FC = () => {
       window.removeEventListener('hashchange', handlePotentialNavigation);
       history.pushState = originalPushState;
       history.replaceState = originalReplaceState;
+      clearDevModeReapplyTimeout();
     };
   }, [helper]);
 
@@ -961,7 +1037,7 @@ const D365Toolbar: React.FC = () => {
         return (
           <button
             key={buttonId}
-            className="d365-toolbar-btn"
+            className="d365-toolbar-btn d365-toolbar-btn-cache-refresh"
             onClick={handleCacheRefresh}
             title="Perform hard refresh (Ctrl+F5) to clear cache"
           >

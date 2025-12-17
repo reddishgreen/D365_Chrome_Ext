@@ -152,6 +152,20 @@
   font-weight: 600;
 }
 
+/* Cache Refresh button styling */
+.d365-toolbar-btn-cache-refresh {
+  background: #b7f0c2 !important; /* pastel green */
+  color: #000 !important;
+}
+
+.d365-toolbar-btn-cache-refresh:hover {
+  background: #a6eab4 !important;
+}
+
+.d365-toolbar-btn-cache-refresh:active {
+  background: #98e3a8 !important;
+}
+
 /* Impersonate button styling */
 .d365-toolbar-btn-impersonate {
   background: #ff9800 !important;
