@@ -3,7 +3,7 @@ export class D365Helper {
   private requestCounter = 0;
   private headerObserver: MutationObserver | null = null;
   private headerFieldsInfo: any[] = [];
-  private overlayColor: string = '#0078d4';
+  private overlayColor: string = '#4bbf0d';
 
   constructor() {
     // Communication happens via custom events with injected script
@@ -304,7 +304,11 @@ export class D365Helper {
     try {
       // Get schema overlay color from settings
       const settings = await chrome.storage.sync.get(['schemaOverlayColor']);
-      const overlayColor = settings.schemaOverlayColor || '#0078d4';
+      // Force set to default if not already set
+      if (!settings.schemaOverlayColor || settings.schemaOverlayColor !== '#4bbf0d') {
+        chrome.storage.sync.set({ schemaOverlayColor: '#4bbf0d' });
+      }
+      const overlayColor = settings.schemaOverlayColor || '#4bbf0d';
 
       // Convert hex to rgba
       const hexToRgba = (hex: string, alpha: number = 0.9): string => {

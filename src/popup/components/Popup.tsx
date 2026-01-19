@@ -82,32 +82,78 @@ const DEFAULT_SECTIONS: SectionConfig[] = [
       { id: 'tools.optionSets', label: 'Option Sets', description: 'View option set values' },
       { id: 'tools.odataFields', label: 'OData Fields', description: 'View OData field metadata' },
       { id: 'tools.auditHistory', label: 'Audit History', description: 'View audit history' },
-      { id: 'tools.formEditor', label: 'Form Editor', description: 'Open form editor' }
+      { id: 'tools.formEditor', label: 'Form Editor', description: 'Open form editor' },
+      { id: 'tools.promptMaker', label: 'AI Prompt Maker', description: 'Generate context prompts for AI assistants' }
     ]
   }
 ];
 
 const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
-  sectionOrder: ['fields', 'sections', 'schema', 'navigation', 'devtools', 'tools'],
-  buttonVisibility: DEFAULT_SECTIONS.reduce((acc, section) => {
-    section.buttons.forEach(button => {
-      acc[button.id] = true;
-    });
-    return acc;
-  }, {} as Record<string, boolean>),
-  sectionLabels: {},
-  sectionButtons: DEFAULT_SECTIONS.reduce((acc, section) => {
-    acc[section.id] = section.buttons.map((b) => b.id);
-    return acc;
-  }, {} as Partial<Record<SectionId, string[]>>)
+  sectionOrder: ['devtools', 'tools', 'sections', 'fields', 'schema', 'navigation'],
+  buttonVisibility: {
+    'fields.showAll': true,
+    'sections.showAll': true,
+    'schema.showNames': true,
+    'schema.copyAll': true,
+    'navigation.solutions': true,
+    'navigation.adminCenter': true,
+    'devtools.enableEditing': false,
+    'devtools.testData': true,
+    'devtools.devMode': true,
+    'devtools.blurFields': false,
+    'devtools.impersonate': true,
+    'tools.copyId': true,
+    'tools.cacheRefresh': true,
+    'tools.webApi': true,
+    'tools.queryBuilder': true,
+    'tools.traceLogs': true,
+    'tools.jsLibraries': true,
+    'tools.optionSets': true,
+    'tools.odataFields': true,
+    'tools.auditHistory': true,
+    'tools.formEditor': false,
+    'tools.promptMaker': true
+  },
+  sectionLabels: {
+    devtools: 'Form Controls',
+    sections: 'Form',
+    tools: 'Dev Tools'
+  },
+  sectionButtons: {
+    devtools: [
+      'devtools.enableEditing',
+      'devtools.devMode',
+      'devtools.testData',
+      'schema.copyAll',
+      'devtools.blurFields',
+      'devtools.impersonate',
+      'tools.copyId'
+    ],
+    tools: [
+      'tools.webApi',
+      'tools.traceLogs',
+      'tools.queryBuilder',
+      'tools.optionSets',
+      'tools.cacheRefresh',
+      'tools.jsLibraries',
+      'tools.odataFields',
+      'tools.auditHistory',
+      'tools.formEditor',
+      'tools.promptMaker'
+    ],
+    sections: ['sections.showAll'],
+    fields: ['fields.showAll'],
+    schema: ['schema.showNames'],
+    navigation: ['navigation.solutions', 'navigation.adminCenter']
+  }
 };
 
 const Popup: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('features');
   const [showTool, setShowTool] = useState(true);
   const [notificationDuration, setNotificationDuration] = useState(3);
-  const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('top');
-  const [schemaOverlayColor, setSchemaOverlayColor] = useState('#0078d4');
+  const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('bottom');
+  const [schemaOverlayColor, setSchemaOverlayColor] = useState('#4bbf0d');
   const [traceLogLimit, setTraceLogLimit] = useState(20);
   const [skipPluginsByDefault, setSkipPluginsByDefault] = useState(false);
   const [toolbarConfig, setToolbarConfig] = useState<ToolbarConfig>(DEFAULT_TOOLBAR_CONFIG);
@@ -199,6 +245,7 @@ const Popup: React.FC = () => {
   };
 
   useEffect(() => {
+    // Load settings from storage
     chrome.storage.sync.get([
       'showTool',
       'notificationDuration',

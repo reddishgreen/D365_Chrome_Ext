@@ -51,7 +51,7 @@ const initializeToolbar = () => {
   // Check if the tool should be shown
   chrome.storage.sync.get(['showTool', 'toolbarPosition'], (result) => {
     const showTool = result.showTool !== undefined ? result.showTool : true;
-    const toolbarPosition = result.toolbarPosition || 'top';
+    const toolbarPosition = result.toolbarPosition !== undefined ? result.toolbarPosition : 'bottom';
 
     if (!showTool) {
       return;

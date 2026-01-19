@@ -1,4 +1,4 @@
-import { EntityMetadata, AttributeMetadata, RelationshipMetadata, ViewMetadata } from '../types';
+import { EntityMetadata, AttributeMetadata, RelationshipMetadata, ViewMetadata, EntityMetadataComplete, AttributeMetadataComplete } from '../types';
 
 export class CrmApi {
   private baseUrl: string;
@@ -163,5 +163,134 @@ export class CrmApi {
         url = `${this.baseUrl}/${url}`;
     }
     return await this.fetchJson(url);
+  }
+
+  async getEntityMetadata(entityLogicalName: string): Promise<EntityMetadataComplete> {
+    // Fetch entity definition
+    const entityUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')?$select=LogicalName,DisplayName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute,Description`;
+    const entityData = await this.fetchJson(entityUrl);
+
+    // Fetch all attributes with comprehensive metadata
+    // Note: MaxLength, Precision, Scale may not be available on all attribute types
+    // We'll fetch them separately for specific attribute types that support them
+    const attributesUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes?$select=LogicalName,DisplayName,AttributeType,IsPrimaryId,IsPrimaryName,RequiredLevel,Description`;
+    const attributesData = await this.fetchJson(attributesUrl);
+
+    // Process attributes and fetch additional details for option sets and lookups
+    const attributes: AttributeMetadataComplete[] = await Promise.all(
+      attributesData.value.map(async (attr: any) => {
+        const attribute: AttributeMetadataComplete = {
+          LogicalName: attr.LogicalName,
+          DisplayName: attr.DisplayName?.UserLocalizedLabel?.Label || attr.LogicalName,
+          AttributeType: attr.AttributeType,
+          IsPrimaryId: attr.IsPrimaryId,
+          IsPrimaryName: attr.IsPrimaryName,
+          RequiredLevel: attr.RequiredLevel?.Value,
+          Description: attr.Description?.UserLocalizedLabel?.Label,
+          IsCalculated: attr.IsCalculated,
+          IsRollup: attr.IsRollup
+        };
+
+        // Fetch MaxLength, Precision, Scale for specific attribute types that support them
+        if (attr.AttributeType === 'String' || attr.AttributeType === 'Memo') {
+          try {
+            const stringUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attr.LogicalName}')/Microsoft.Dynamics.CRM.StringAttributeMetadata?$select=MaxLength`;
+            const stringData = await this.fetchJson(stringUrl);
+            attribute.MaxLength = stringData.MaxLength;
+          } catch (e) {
+            // MaxLength not available for this attribute type, skip it
+          }
+        } else if (attr.AttributeType === 'Decimal' || attr.AttributeType === 'Money') {
+          try {
+            const decimalUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attr.LogicalName}')/Microsoft.Dynamics.CRM.DecimalAttributeMetadata?$select=Precision`;
+            const decimalData = await this.fetchJson(decimalUrl);
+            attribute.Precision = decimalData.Precision;
+          } catch (e) {
+            // Precision not available, skip it
+          }
+        }
+
+        // Fetch option set values if it's an option set
+        if (attr.AttributeType === 'Picklist' || attr.AttributeType === 'State' || attr.AttributeType === 'Status') {
+          try {
+            const optionSetUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attr.LogicalName}')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$expand=OptionSet($expand=Options($select=Value,Label))`;
+            const optionSetData = await this.fetchJson(optionSetUrl);
+            if (optionSetData.OptionSet?.Options) {
+              attribute.OptionSetValues = optionSetData.OptionSet.Options.map((opt: any) => ({
+                Value: opt.Value,
+                Label: opt.Label?.UserLocalizedLabel?.Label || String(opt.Value)
+              }));
+            }
+          } catch (e) {
+            // Option set fetch failed, continue without values
+            console.warn(`Failed to fetch option set for ${attr.LogicalName}`, e);
+          }
+        }
+
+        // Fetch lookup targets if it's a lookup
+        if (attr.AttributeType === 'Lookup') {
+          try {
+            const lookupUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attr.LogicalName}')/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=Targets`;
+            const lookupData = await this.fetchJson(lookupUrl);
+            attribute.LookupTargets = lookupData.Targets || [];
+            
+            // Check if polymorphic (Customer/Regarding)
+            if (lookupData.Targets && lookupData.Targets.length > 1) {
+              attribute.IsPolymorphic = true;
+            }
+          } catch (e) {
+            // Lookup fetch failed, continue without targets
+            console.warn(`Failed to fetch lookup targets for ${attr.LogicalName}`, e);
+          }
+        }
+
+        // Check if activity party (from/to fields)
+        if (attr.LogicalName.toLowerCase().includes('party') || 
+            attr.LogicalName.toLowerCase().includes('from') || 
+            attr.LogicalName.toLowerCase().includes('to')) {
+          attribute.IsActivityParty = true;
+        }
+
+        return attribute;
+      })
+    );
+
+    // Sort attributes
+    attributes.sort((a, b) => (a.DisplayName || a.LogicalName).localeCompare(b.DisplayName || b.LogicalName));
+
+    // Fetch all relationship types
+    const [oneToMany, manyToOne, manyToMany] = await Promise.all([
+      this.getRelationships(entityLogicalName, 'OneToMany').catch(() => []),
+      this.getRelationships(entityLogicalName, 'ManyToOne').catch(() => []),
+      this.getManyToManyRelationships(entityLogicalName).catch(() => [])
+    ]);
+
+    return {
+      LogicalName: entityData.LogicalName,
+      DisplayName: entityData.DisplayName?.UserLocalizedLabel?.Label || entityData.LogicalName,
+      EntitySetName: entityData.EntitySetName,
+      PrimaryIdAttribute: entityData.PrimaryIdAttribute,
+      PrimaryNameAttribute: entityData.PrimaryNameAttribute,
+      Description: entityData.Description?.UserLocalizedLabel?.Label,
+      Attributes: attributes,
+      OneToManyRelationships: oneToMany,
+      ManyToOneRelationships: manyToOne,
+      ManyToManyRelationships: manyToMany
+    };
+  }
+
+  async getManyToManyRelationships(logicalName: string): Promise<RelationshipMetadata[]> {
+    const url = `${this.baseUrl}/EntityDefinitions(LogicalName='${logicalName}')/ManyToManyRelationships`;
+    const data = await this.fetchJson(url);
+
+    return data.value.map((r: any) => ({
+      SchemaName: r.SchemaName,
+      ReferencingEntity: r.Entity1LogicalName,
+      ReferencedEntity: r.Entity2LogicalName,
+      ReferencingAttribute: '', // ManyToMany doesn't have a single referencing attribute
+      ReferencingEntityNavigationPropertyName: r.Entity1NavigationPropertyName || '',
+      ReferencedEntityNavigationPropertyName: r.Entity2NavigationPropertyName || '',
+      RelationshipType: 'ManyToMany' as const
+    }));
   }
 }

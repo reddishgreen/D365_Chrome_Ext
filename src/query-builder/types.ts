@@ -15,6 +15,20 @@ export interface AttributeMetadata {
   IsPrimaryName?: boolean;
 }
 
+export interface AttributeMetadataComplete extends AttributeMetadata {
+  RequiredLevel?: string;
+  MaxLength?: number;
+  Precision?: number;
+  Scale?: number;
+  Description?: string;
+  OptionSetValues?: Array<{ Value: number; Label: string }>;
+  LookupTargets?: string[];
+  IsCalculated?: boolean;
+  IsRollup?: boolean;
+  IsPolymorphic?: boolean;
+  IsActivityParty?: boolean;
+}
+
 export interface RelationshipMetadata {
   SchemaName: string;
   ReferencingEntity: string;
@@ -23,6 +37,13 @@ export interface RelationshipMetadata {
   ReferencingEntityNavigationPropertyName: string;
   ReferencedEntityNavigationPropertyName?: string;
   RelationshipType: 'OneToMany' | 'ManyToOne' | 'ManyToMany';
+}
+
+export interface EntityMetadataComplete extends EntityMetadata {
+  Attributes: AttributeMetadataComplete[];
+  OneToManyRelationships: RelationshipMetadata[];
+  ManyToOneRelationships: RelationshipMetadata[];
+  ManyToManyRelationships: RelationshipMetadata[];
 }
 
 export interface QueryFilter {

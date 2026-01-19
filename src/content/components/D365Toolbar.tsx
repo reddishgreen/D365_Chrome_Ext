@@ -8,6 +8,7 @@ import ODataFieldsViewer, { ODataFieldsData } from './ODataFieldsViewer';
 import AuditHistoryViewer, { AuditHistoryData } from './AuditHistoryViewer';
 import QueryBuilder from '../../query-builder/components/QueryBuilder';
 import ImpersonationSelector, { ImpersonationData, SystemUser } from './ImpersonationSelector';
+import PromptMakerViewer from './PromptMakerViewer';
 
 // Toolbar configuration types
 type SectionId = 'fields' | 'sections' | 'schema' | 'navigation' | 'devtools' | 'tools';
@@ -46,15 +47,68 @@ const DEFAULT_SECTION_BUTTONS: Record<SectionId, string[]> = {
     'tools.optionSets',
     'tools.odataFields',
     'tools.auditHistory',
-    'tools.formEditor'
+    'tools.formEditor',
+    'tools.promptMaker'
   ]
 };
 
 const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
-  sectionOrder: ['fields', 'sections', 'schema', 'navigation', 'devtools', 'tools'],
-  buttonVisibility: {},
-  sectionLabels: {},
-  sectionButtons: DEFAULT_SECTION_BUTTONS
+  sectionOrder: ['devtools', 'tools', 'sections', 'fields', 'schema', 'navigation'],
+  buttonVisibility: {
+    'fields.showAll': true,
+    'sections.showAll': true,
+    'schema.showNames': true,
+    'schema.copyAll': true,
+    'navigation.solutions': true,
+    'navigation.adminCenter': true,
+    'devtools.enableEditing': false,
+    'devtools.testData': true,
+    'devtools.devMode': true,
+    'devtools.blurFields': false,
+    'devtools.impersonate': true,
+    'tools.copyId': true,
+    'tools.cacheRefresh': true,
+    'tools.webApi': true,
+    'tools.queryBuilder': true,
+    'tools.traceLogs': true,
+    'tools.jsLibraries': true,
+    'tools.optionSets': true,
+    'tools.odataFields': true,
+    'tools.auditHistory': true,
+    'tools.formEditor': false,
+    'tools.promptMaker': true
+  },
+  sectionLabels: {
+    devtools: 'Form Controls',
+    sections: 'Form',
+    tools: 'Dev Tools'
+  },
+  sectionButtons: {
+    devtools: [
+      'devtools.enableEditing',
+      'devtools.devMode',
+      'devtools.testData',
+      'schema.copyAll',
+      'devtools.blurFields',
+      'devtools.impersonate',
+      'tools.copyId'
+    ],
+    tools: [
+      'tools.webApi',
+      'tools.traceLogs',
+      'tools.queryBuilder',
+      'tools.optionSets',
+      'tools.cacheRefresh',
+      'tools.jsLibraries',
+      'tools.odataFields',
+      'tools.auditHistory',
+      'tools.formEditor'
+    ],
+    sections: ['sections.showAll'],
+    fields: ['fields.showAll'],
+    schema: ['schema.showNames'],
+    navigation: ['navigation.solutions', 'navigation.adminCenter']
+  }
 };
 
 const D365Toolbar: React.FC = () => {
@@ -68,6 +122,7 @@ const D365Toolbar: React.FC = () => {
   const [librariesData, setLibrariesData] = useState<any>(null);
   const [showTraceLogs, setShowTraceLogs] = useState(false);
   const [traceLogData, setTraceLogData] = useState<PluginTraceLogData | null>(null);
+  const [showPromptMaker, setShowPromptMaker] = useState(false);
   const [showOptionSets, setShowOptionSets] = useState(false);
   const [optionSetData, setOptionSetData] = useState<OptionSetsData | null>(null);
   const [showODataFields, setShowODataFields] = useState(false);
@@ -76,7 +131,7 @@ const D365Toolbar: React.FC = () => {
   const [auditHistoryData, setAuditHistoryData] = useState<AuditHistoryData | null>(null);
   const [showQueryBuilder, setShowQueryBuilder] = useState(false);
   const [notificationDuration, setNotificationDuration] = useState(3);
-  const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('top');
+  const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('bottom');
   const [traceLogLimit, setTraceLogLimit] = useState(20);
   const [toolbarConfig, setToolbarConfig] = useState<ToolbarConfig>(DEFAULT_TOOLBAR_CONFIG);
   const [showImpersonation, setShowImpersonation] = useState(false);
@@ -89,6 +144,8 @@ const D365Toolbar: React.FC = () => {
   const devModeActiveRef = useRef(devModeActive);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const helperRef = useRef<D365Helper | null>(null);
+  const applyDevModeRef = useRef<((showNotification?: boolean) => Promise<void>) | null>(null);
+  const removeDevModeRef = useRef<((showNotification?: boolean) => Promise<void>) | null>(null);
 
   // Create helper instance only once
   if (!helperRef.current) {
@@ -159,7 +216,7 @@ const D365Toolbar: React.FC = () => {
       return { sectionOrder, buttonVisibility, sectionLabels, sectionButtons: normalizedSectionButtons };
     };
 
-    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit', 'toolbarConfig'], (result) => {
+    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit', 'toolbarConfig', 'devModeActive'], (result) => {
       if (result.notificationDuration !== undefined) {
         setNotificationDuration(result.notificationDuration);
       }
@@ -171,6 +228,12 @@ const D365Toolbar: React.FC = () => {
       }
       if (result.toolbarConfig !== undefined) {
         setToolbarConfig(normalizeToolbarConfig(result.toolbarConfig));
+      }
+      // Load Dev Mode state from storage and apply if enabled
+      // Note: applyDevMode will be called after it's defined, via a separate effect
+      if (result.devModeActive === true) {
+        setDevModeActive(true);
+        devModeActiveRef.current = true;
       }
     });
 
@@ -187,6 +250,16 @@ const D365Toolbar: React.FC = () => {
       }
       if (changes.toolbarConfig) {
         setToolbarConfig(normalizeToolbarConfig(changes.toolbarConfig.newValue));
+      }
+      if (changes.devModeActive !== undefined) {
+        const newDevModeState = changes.devModeActive.newValue === true;
+        if (newDevModeState !== devModeActive) {
+          if (newDevModeState) {
+            void applyDevMode(false);
+          } else {
+            void removeDevMode(false);
+          }
+        }
       }
     };
 
@@ -253,6 +326,95 @@ const D365Toolbar: React.FC = () => {
     devModeActiveRef.current = devModeActive;
   }, [devModeActive]);
 
+  // Wait for form to be ready and apply Dev Mode if it was previously enabled
+  useEffect(() => {
+    let checkInterval: number | undefined;
+    let maxAttempts = 30; // Try for up to 15 seconds (30 * 500ms)
+    let attempts = 0;
+    let hasApplied = false; // Track if we've already applied to avoid duplicates
+
+    const checkAndApplyDevMode = async () => {
+      try {
+        // Check if form is ready by trying to get record ID
+        try {
+          await helper.getRecordId();
+          // Form is ready, now check storage
+          const result = await chrome.storage.sync.get(['devModeActive']);
+          console.log('[D365 Helper] Dev Mode storage check:', result.devModeActive);
+          
+          if (result.devModeActive === true) {
+            // Apply if storage says it should be active (user had it on when navigating between forms)
+            if (!hasApplied && applyDevModeRef.current) {
+              console.log('[D365 Helper] Reapplying Dev Mode from storage...');
+              hasApplied = true;
+              setDevModeActive(true);
+              devModeActiveRef.current = true;
+              // Wait a bit for D365 to finish initializing
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              // Apply Dev Mode
+              try {
+                await applyDevModeRef.current(false);
+                // Wait and reapply schema overlay in case D365 reset it
+                await new Promise(resolve => setTimeout(resolve, 500));
+                try {
+                  await helper.toggleSchemaOverlay(true);
+                  setShowSchemaNames(true);
+                  showSchemaNamesRef.current = true;
+                  console.log('[D365 Helper] Schema overlay reapplied after initial load');
+                } catch (error) {
+                  console.warn('[D365 Helper] Failed to reapply schema overlay', error);
+                }
+                console.log('[D365 Helper] Dev Mode applied successfully');
+              } catch (error) {
+                console.error('[D365 Helper] Failed to apply Dev Mode:', error);
+                hasApplied = false; // Allow retry
+              }
+            }
+            // Clear interval once we've applied
+            if (hasApplied && checkInterval) {
+              clearInterval(checkInterval);
+              checkInterval = undefined;
+            }
+          } else {
+            // Dev Mode is off in storage, make sure state matches
+            if (devModeActive || devModeActiveRef.current) {
+              console.log('[D365 Helper] Dev Mode is off in storage, resetting state');
+              setDevModeActive(false);
+              devModeActiveRef.current = false;
+            }
+            if (checkInterval) {
+              clearInterval(checkInterval);
+              checkInterval = undefined;
+            }
+          }
+        } catch (error) {
+          // Form not ready yet, continue checking
+          attempts++;
+          if (attempts >= maxAttempts) {
+            console.warn('[D365 Helper] Form not ready after max attempts, giving up');
+            // Give up after max attempts
+            if (checkInterval) {
+              clearInterval(checkInterval);
+              checkInterval = undefined;
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[D365 Helper] Failed to check Dev Mode state', error);
+      }
+    };
+
+    // Start checking immediately, then every 500ms
+    checkAndApplyDevMode();
+    checkInterval = window.setInterval(checkAndApplyDevMode, 500);
+
+    return () => {
+      if (checkInterval) {
+        clearInterval(checkInterval);
+      }
+    };
+  }, []); // Only run once on mount
+
   useEffect(() => {
     const { history } = window;
     let lastUrl = window.location.href;
@@ -268,58 +430,121 @@ const D365Toolbar: React.FC = () => {
       }
     };
 
-    const scheduleDevModeReapply = (delayMs: number = 900) => {
+    const scheduleDevModeReapply = (delayMs: number = 1500) => {
       clearDevModeReapplyTimeout();
       devModeReapplyTimeout = window.setTimeout(() => {
         void reapplyDevModeAfterNavigation();
       }, delayMs);
     };
 
-    const reapplyDevModeAfterNavigation = async () => {
-      if (!devModeActiveRef.current) return;
-      if (devModeReapplyInProgress) return;
-      devModeReapplyInProgress = true;
-
-      try {
-        // Dev Mode should re-apply on each form navigation so the button state always matches reality.
-        await helper.toggleAllFields(true);
-        await helper.toggleAllSections(true);
-        allFieldsVisibleRef.current = true;
-        allSectionsVisibleRef.current = true;
-        setAllFieldsVisible(true);
-        setAllSectionsVisible(true);
-
-        await helper.unlockFields();
-        await helper.disableFieldRequirements();
-
-        // Wait for DOM updates after showing fields/sections, then re-create overlays
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        await helper.toggleSchemaOverlay(true);
-        showSchemaNamesRef.current = true;
-        setShowSchemaNames(true);
-
-        devModeReapplyAttempts = 0;
-      } catch (error) {
-        devModeReapplyAttempts += 1;
-        if (devModeReapplyAttempts <= MAX_DEV_MODE_REAPPLY_ATTEMPTS) {
-          // Form may still be loading; retry with a small backoff.
-          const backoff = 600 + devModeReapplyAttempts * 500;
-          scheduleDevModeReapply(backoff);
-        } else {
-          // Give up and reset Dev Mode so the UI never stays "stuck" active.
-          console.warn('D365 Helper: Dev Mode reapply failed after navigation; resetting Dev Mode.', error);
-          devModeActiveRef.current = false;
-          showSchemaNamesRef.current = false;
-          allFieldsVisibleRef.current = false;
-          allSectionsVisibleRef.current = false;
-          setDevModeActive(false);
-          setShowSchemaNames(false);
-          setAllFieldsVisible(false);
-          setAllSectionsVisible(false);
-        }
-      } finally {
-        devModeReapplyInProgress = false;
+    // Helper function to check if current page is a form
+    const isCurrentPageAForm = (): boolean => {
+      const xrm = (window as any).Xrm;
+      if (xrm && xrm.Page && xrm.Page.data && xrm.Page.data.entity) {
+        return true;
       }
+      const url = window.location.href;
+      if (url.includes('pagetype=entityrecord') ||
+          url.includes('etn=') ||
+          url.includes('extraqs=') ||
+          url.includes('formid=')) {
+        return true;
+      }
+      return false;
+    };
+
+    const reapplyDevModeAfterNavigation = async () => {
+      console.log('[D365 Helper] Reapplying Dev Mode after navigation...');
+      // Check storage to see if Dev Mode should be active
+      chrome.storage.sync.get(['devModeActive'], async (result) => {
+        const shouldBeActive = result.devModeActive === true;
+        console.log('[D365 Helper] Reapply check - Dev Mode should be active:', shouldBeActive);
+        
+        if (!shouldBeActive) {
+          // Dev Mode is off in storage, make sure UI matches
+          console.log('[D365 Helper] Dev Mode is off, resetting state');
+          if (devModeActiveRef.current) {
+            devModeActiveRef.current = false;
+            setDevModeActive(false);
+          }
+          return;
+        }
+        
+        // Dev Mode should be active, reapply it
+        if (devModeReapplyInProgress) {
+          console.log('[D365 Helper] Reapply already in progress, skipping');
+          return;
+        }
+        devModeReapplyInProgress = true;
+
+        // Wait for form to be ready before applying
+        let formReady = false;
+        let readyAttempts = 0;
+        const maxReadyAttempts = 30;
+
+        console.log('[D365 Helper] Waiting for form to be ready...');
+        while (!formReady && readyAttempts < maxReadyAttempts) {
+          try {
+            await helper.getRecordId();
+            formReady = true;
+            console.log('[D365 Helper] Form is ready after', readyAttempts, 'attempts');
+          } catch (error) {
+            readyAttempts++;
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        }
+
+        if (!formReady) {
+          console.warn('[D365 Helper] Form not ready after navigation, will retry');
+          devModeReapplyInProgress = false;
+          scheduleDevModeReapply(1500);
+          return;
+        }
+
+        // Form is ready, wait a bit more for D365 to finish initializing
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Form is ready, apply Dev Mode
+        if (applyDevModeRef.current) {
+          try {
+            console.log('[D365 Helper] Applying Dev Mode after navigation...');
+            await applyDevModeRef.current(false);
+            // Wait a bit and reapply schema overlay in case D365 reset it
+            await new Promise(resolve => setTimeout(resolve, 500));
+            try {
+              await helper.toggleSchemaOverlay(true);
+              setShowSchemaNames(true);
+              showSchemaNamesRef.current = true;
+              console.log('[D365 Helper] Schema overlay reapplied after delay');
+            } catch (error) {
+              console.warn('[D365 Helper] Failed to reapply schema overlay', error);
+            }
+            console.log('[D365 Helper] Dev Mode reapplied successfully');
+            devModeReapplyAttempts = 0;
+            devModeReapplyInProgress = false;
+          } catch (error) {
+            console.error('[D365 Helper] Failed to reapply Dev Mode:', error);
+            devModeReapplyAttempts += 1;
+            if (devModeReapplyAttempts <= MAX_DEV_MODE_REAPPLY_ATTEMPTS) {
+              // Form may still be loading; retry with a small backoff.
+              const backoff = 600 + devModeReapplyAttempts * 500;
+              console.log('[D365 Helper] Retrying Dev Mode reapply in', backoff, 'ms');
+              scheduleDevModeReapply(backoff);
+              devModeReapplyInProgress = false;
+            } else {
+              // Give up and reset Dev Mode so the UI never stays "stuck" active.
+              console.warn('[D365 Helper] Dev Mode reapply failed after navigation; resetting Dev Mode.', error);
+              if (removeDevModeRef.current) {
+                await removeDevModeRef.current(false);
+              }
+              devModeReapplyInProgress = false;
+            }
+          }
+        } else {
+          console.warn('[D365 Helper] applyDevModeRef.current is null, cannot reapply');
+          devModeReapplyInProgress = false;
+        }
+      });
     };
 
     const resetSchemaOverlay = () => {
@@ -374,15 +599,41 @@ const D365Toolbar: React.FC = () => {
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
-        if (devModeActiveRef.current) {
-          // Keep Dev Mode on, but re-apply it for the newly loaded form.
-          scheduleDevModeReapply(900);
+        console.log('[D365 Helper] Navigation detected to:', currentUrl);
+        
+        // Check if we're still on a form page
+        const isFormPage = isCurrentPageAForm();
+        console.log('[D365 Helper] Is current page a form?', isFormPage);
+        
+        if (!isFormPage) {
+          // Navigated to a non-form page (grid, dashboard, etc.) - deactivate Dev Mode
+          console.log('[D365 Helper] Navigated to non-form page, deactivating Dev Mode');
+          if (devModeActiveRef.current && removeDevModeRef.current) {
+            removeDevModeRef.current(false).catch((error) => {
+              console.error('[D365 Helper] Failed to deactivate Dev Mode:', error);
+            });
+          } else {
+            resetSchemaOverlay();
+            resetFieldsVisibility();
+            resetSectionsVisibility();
+          }
+          resetFieldsBlur();
         } else {
-          resetSchemaOverlay();
-          resetFieldsVisibility();
-          resetSectionsVisibility();
+          // Still on a form page - check if Dev Mode should stay active
+          chrome.storage.sync.get(['devModeActive'], (result) => {
+            const shouldBeActive = result.devModeActive === true;
+            if (shouldBeActive) {
+              // Keep Dev Mode on, but re-apply it for the newly loaded form.
+              console.log('[D365 Helper] Staying on form page, reapplying Dev Mode');
+              scheduleDevModeReapply(1500);
+            } else {
+              resetSchemaOverlay();
+              resetFieldsVisibility();
+              resetSectionsVisibility();
+            }
+          });
+          resetFieldsBlur();
         }
-        resetFieldsBlur();
       }
     };
 
@@ -610,6 +861,15 @@ const D365Toolbar: React.FC = () => {
     setTraceLogData(null);
   };
 
+  const handleOpenPromptMaker = () => {
+    setShowPromptMaker(true);
+    showNotification('Opening AI Prompt Maker...');
+  };
+
+  const handleClosePromptMaker = () => {
+    setShowPromptMaker(false);
+  };
+
   const loadOptionSets = async (openModal: boolean = false) => {
     try {
       showNotification('Loading option sets...');
@@ -728,52 +988,124 @@ const D365Toolbar: React.FC = () => {
     }
   };
 
+  // Helper function to apply Dev Mode
+  const applyDevMode = useCallback(async (showNotificationMessage: boolean = true) => {
+    if (showNotificationMessage) {
+      showNotification('Activating Developer Mode...');
+    }
+    console.log('[D365 Helper] applyDevMode: Starting...');
+    
+    try {
+      await helper.toggleAllFields(true);
+      console.log('[D365 Helper] applyDevMode: Fields toggled');
+    } catch (error) {
+      console.error('[D365 Helper] applyDevMode: Failed to toggle fields', error);
+    }
+    
+    try {
+      await helper.toggleAllSections(true);
+      console.log('[D365 Helper] applyDevMode: Sections toggled');
+    } catch (error) {
+      console.error('[D365 Helper] applyDevMode: Failed to toggle sections', error);
+    }
+    
+    setAllFieldsVisible(true);
+    setAllSectionsVisible(true);
+    allFieldsVisibleRef.current = true;
+    allSectionsVisibleRef.current = true;
+    
+    try {
+      const unlocked = await helper.unlockFields();
+      console.log('[D365 Helper] applyDevMode: Unlocked', unlocked, 'fields');
+    } catch (error) {
+      console.error('[D365 Helper] applyDevMode: Failed to unlock fields', error);
+    }
+    
+    try {
+      const disabled = await helper.disableFieldRequirements();
+      console.log('[D365 Helper] applyDevMode: Disabled', disabled, 'required fields');
+    } catch (error) {
+      console.error('[D365 Helper] applyDevMode: Failed to disable requirements', error);
+    }
+    
+    // Wait longer for DOM to update after showing fields/sections
+    // D365 may need more time to fully render the form
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // Activate schema names overlay after fields are visible
+    // Always apply, don't check ref - D365 may have reset it
+    try {
+      await helper.toggleSchemaOverlay(true);
+      setShowSchemaNames(true);
+      showSchemaNamesRef.current = true;
+      console.log('[D365 Helper] applyDevMode: Schema overlay applied');
+    } catch (error) {
+      console.error('[D365 Helper] applyDevMode: Failed to toggle schema overlay', error);
+    }
+    
+    setDevModeActive(true);
+    devModeActiveRef.current = true;
+    // Save to storage
+    chrome.storage.sync.set({ devModeActive: true });
+    
+    if (showNotificationMessage) {
+      showNotification(`Dev Mode: enabled fields and controls for testing.`);
+    }
+    
+    console.log('[D365 Helper] applyDevMode: Complete');
+  }, [helper]);
+
+  // Store refs to functions for use in effects
+  useEffect(() => {
+    applyDevModeRef.current = applyDevMode;
+  }, [applyDevMode]);
+
+  // Helper function to remove Dev Mode
+  const removeDevMode = useCallback(async (showNotificationMessage: boolean = true) => {
+    if (showNotificationMessage) {
+      showNotification('Deactivating Developer Mode...');
+    }
+
+    // Reset fields visibility
+    await helper.toggleAllFields(false);
+    setAllFieldsVisible(false);
+    allFieldsVisibleRef.current = false;
+
+    // Reset sections visibility
+    await helper.toggleAllSections(false);
+    setAllSectionsVisible(false);
+    allSectionsVisibleRef.current = false;
+
+    // Reset schema overlay
+    if (showSchemaNamesRef.current) {
+      await helper.toggleSchemaOverlay(false);
+      setShowSchemaNames(false);
+      showSchemaNamesRef.current = false;
+    }
+
+    setDevModeActive(false);
+    devModeActiveRef.current = false;
+    // Save to storage
+    chrome.storage.sync.set({ devModeActive: false });
+    
+    if (showNotificationMessage) {
+      showNotification('Dev Mode deactivated - form reset to original state');
+    }
+  }, [helper]);
+
+  // Store refs to functions for use in effects
+  useEffect(() => {
+    removeDevModeRef.current = removeDevMode;
+  }, [removeDevMode]);
+
   const handleEnableDevMode = async () => {
     const newState = !devModeActive;
 
     try {
       if (newState) {
-        // Activate Dev Mode
-        showNotification('Activating Developer Mode...');
-        await helper.toggleAllFields(true);
-        await helper.toggleAllSections(true);
-        setAllFieldsVisible(true);
-        setAllSectionsVisible(true);
-        const unlocked = await helper.unlockFields();
-        const disabled = await helper.disableFieldRequirements();
-        
-        // Wait for DOM to update after showing fields/sections
-        // This ensures all fields are visible before trying to add schema name overlays
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Activate schema names overlay after fields are visible
-        if (!showSchemaNames) {
-          await helper.toggleSchemaOverlay(true);
-          setShowSchemaNames(true);
-        }
-        
-        setDevModeActive(true);
-        showNotification(`Dev Mode: enabled ${unlocked} fields and ${disabled} controls for testing.`);
+        await applyDevMode(true);
       } else {
-        // Deactivate Dev Mode - reset everything
-        showNotification('Deactivating Developer Mode...');
-
-        // Reset fields visibility
-        await helper.toggleAllFields(false);
-        setAllFieldsVisible(false);
-
-        // Reset sections visibility
-        await helper.toggleAllSections(false);
-        setAllSectionsVisible(false);
-
-        // Reset schema overlay
-        if (showSchemaNames) {
-          await helper.toggleSchemaOverlay(false);
-          setShowSchemaNames(false);
-        }
-
-        setDevModeActive(false);
-        showNotification('Dev Mode deactivated - form reset to original state');
+        await removeDevMode(true);
       }
     } catch (error) {
       showNotification(newState ? 'Error enabling Developer Mode' : 'Error disabling Developer Mode');
@@ -1066,6 +1398,13 @@ const D365Toolbar: React.FC = () => {
           </button>
         );
 
+      case 'tools.promptMaker':
+        return (
+          <button key={buttonId} className="d365-toolbar-btn" onClick={handleOpenPromptMaker} title="AI Prompt Maker - Generate context for AI assistants">
+            AI Prompt Maker
+          </button>
+        );
+
       case 'tools.jsLibraries':
         return (
           <button
@@ -1182,6 +1521,12 @@ const D365Toolbar: React.FC = () => {
           onClose={handleCloseTraceLogs}
           onRefresh={handleRefreshTraceLogs}
           onClear={handleClearTraceLogs}
+        />
+      )}
+
+      {showPromptMaker && (
+        <PromptMakerViewer
+          onClose={handleClosePromptMaker}
         />
       )}
 
