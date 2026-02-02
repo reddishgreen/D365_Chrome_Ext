@@ -5,7 +5,11 @@
       "Bash(powershell -Command:*)",
       "Bash(unzip:*)",
       "Bash(npm run build:*)",
-      "Bash(node create-zip.js:*)"
+      "Bash(node create-zip.js:*)",
+      "Bash(dir:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []
