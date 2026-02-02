@@ -752,7 +752,7 @@ const WebAPIViewer: React.FC = () => {
       );
     }
 
-    if (value === null || typeof value === 'undefined') {
+    if (currentValue === null || typeof currentValue === 'undefined') {
       return (
         <>
           {isEditable ? (
@@ -777,14 +777,23 @@ const WebAPIViewer: React.FC = () => {
       return (
         <>
           {isEditable ? (
-            <select
-              className="edit-select"
-              value={currentValue.toString()}
-              onChange={(e) => handleValueChange(key, e.target.value === 'true')}
-            >
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </select>
+            <>
+              <select
+                className="edit-select"
+                value={currentValue.toString()}
+                onChange={(e) => handleValueChange(key, e.target.value === 'true')}
+              >
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+              <button
+                className="clear-field-btn"
+                onClick={() => handleValueChange(key, null)}
+                title="Set to null"
+              >
+                ✕
+              </button>
+            </>
           ) : (
             <span className="value-boolean">{currentValue.toString()}</span>
           )}
@@ -799,12 +808,21 @@ const WebAPIViewer: React.FC = () => {
       return (
         <>
           {isEditable ? (
-            <input
-              type="number"
-              className="edit-input"
-              value={currentValue}
-              onChange={(e) => handleValueChange(key, parseFloat(e.target.value))}
-            />
+            <>
+              <input
+                type="number"
+                className="edit-input"
+                value={currentValue}
+                onChange={(e) => handleValueChange(key, parseFloat(e.target.value))}
+              />
+              <button
+                className="clear-field-btn"
+                onClick={() => handleValueChange(key, null)}
+                title="Set to null"
+              >
+                ✕
+              </button>
+            </>
           ) : (
             <span className="value-number">{currentValue}</span>
           )}
@@ -820,12 +838,21 @@ const WebAPIViewer: React.FC = () => {
         return (
           <>
             {isEditable ? (
-              <input
-                type="datetime-local"
-                className="edit-input"
-                value={currentValue.substring(0, 16)}
-                onChange={(e) => handleValueChange(key, new Date(e.target.value).toISOString())}
-              />
+              <>
+                <input
+                  type="datetime-local"
+                  className="edit-input"
+                  value={currentValue.substring(0, 16)}
+                  onChange={(e) => handleValueChange(key, new Date(e.target.value).toISOString())}
+                />
+                <button
+                  className="clear-field-btn"
+                  onClick={() => handleValueChange(key, null)}
+                  title="Set to null"
+                >
+                  ✕
+                </button>
+              </>
             ) : (
               <span className="value-string">
                 "{currentValue}" <span className="value-hint">({new Date(currentValue).toLocaleString()})</span>
@@ -841,12 +868,21 @@ const WebAPIViewer: React.FC = () => {
       return (
         <>
           {isEditable ? (
-            <input
-              type="text"
-              className="edit-input"
-              value={currentValue}
-              onChange={(e) => handleValueChange(key, e.target.value)}
-            />
+            <>
+              <input
+                type="text"
+                className="edit-input"
+                value={currentValue}
+                onChange={(e) => handleValueChange(key, e.target.value)}
+              />
+              <button
+                className="clear-field-btn"
+                onClick={() => handleValueChange(key, null)}
+                title="Set to null"
+              >
+                ✕
+              </button>
+            </>
           ) : (
             <span className="value-string">"{currentValue}"</span>
           )}

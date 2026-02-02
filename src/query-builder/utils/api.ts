@@ -107,6 +107,60 @@ export class CrmApi {
     );
   }
 
+  async getOptionSetValues(entityLogicalName: string, attributeLogicalName: string): Promise<Array<{ Value: number; Label: string }>> {
+    // Try each attribute type in sequence until one works
+    const tryFetchOptions = async (metadataType: string): Promise<Array<{ Value: number; Label: string }> | null> => {
+      try {
+        const url = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes(LogicalName='${attributeLogicalName}')/${metadataType}?$expand=OptionSet`;
+        const data = await this.fetchJson(url);
+
+        if (data.OptionSet?.Options) {
+          // Standard option set (Picklist, State, Status)
+          return data.OptionSet.Options.map((opt: any) => ({
+            Value: opt.Value,
+            Label: opt.Label?.UserLocalizedLabel?.Label || String(opt.Value)
+          }));
+        } else if (data.OptionSet?.FalseOption || data.OptionSet?.TrueOption) {
+          // Boolean attribute - has FalseOption/TrueOption instead of Options array
+          const options: Array<{ Value: number; Label: string }> = [];
+          if (data.OptionSet.FalseOption) {
+            options.push({
+              Value: data.OptionSet.FalseOption.Value,
+              Label: data.OptionSet.FalseOption.Label?.UserLocalizedLabel?.Label || 'No'
+            });
+          }
+          if (data.OptionSet.TrueOption) {
+            options.push({
+              Value: data.OptionSet.TrueOption.Value,
+              Label: data.OptionSet.TrueOption.Label?.UserLocalizedLabel?.Label || 'Yes'
+            });
+          }
+          return options;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Try each metadata type in order
+    const metadataTypes = [
+      'Microsoft.Dynamics.CRM.PicklistAttributeMetadata',
+      'Microsoft.Dynamics.CRM.StateAttributeMetadata',
+      'Microsoft.Dynamics.CRM.StatusAttributeMetadata',
+      'Microsoft.Dynamics.CRM.BooleanAttributeMetadata'
+    ];
+
+    for (const metadataType of metadataTypes) {
+      const options = await tryFetchOptions(metadataType);
+      if (options && options.length > 0) {
+        return options;
+      }
+    }
+
+    return [];
+  }
+
   async getRelationships(logicalName: string, type: 'OneToMany' | 'ManyToOne'): Promise<RelationshipMetadata[]> {
     const url = `${this.baseUrl}/EntityDefinitions(LogicalName='${logicalName}')/${type}Relationships`;
     const data = await this.fetchJson(url);
@@ -163,6 +217,42 @@ export class CrmApi {
         url = `${this.baseUrl}/${url}`;
     }
     return await this.fetchJson(url);
+  }
+
+  /**
+   * Fetches all pages of data from an OData query, handling @odata.nextLink pagination.
+   * This bypasses the default 5000 record limit by following continuation links.
+   *
+   * @param queryUrl - The initial OData query URL
+   * @param onProgress - Optional callback to report progress (recordsFetched, isComplete)
+   * @returns Promise resolving to all records concatenated together
+   */
+  async fetchAllPages(
+    queryUrl: string,
+    onProgress?: (recordsFetched: number, isComplete: boolean) => void
+  ): Promise<any[]> {
+    let allRecords: any[] = [];
+    let url = queryUrl;
+
+    if (!url.startsWith('http')) {
+      url = `${this.baseUrl}/${url}`;
+    }
+
+    while (url) {
+      const response = await this.fetchJson(url);
+      const records = response.value || [];
+      allRecords = allRecords.concat(records);
+
+      // Report progress
+      if (onProgress) {
+        onProgress(allRecords.length, !response['@odata.nextLink']);
+      }
+
+      // Check for next page
+      url = response['@odata.nextLink'] || null;
+    }
+
+    return allRecords;
   }
 
   async getEntityMetadata(entityLogicalName: string): Promise<EntityMetadataComplete> {

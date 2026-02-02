@@ -156,6 +156,7 @@ const Popup: React.FC = () => {
   const [schemaOverlayColor, setSchemaOverlayColor] = useState('#4bbf0d');
   const [traceLogLimit, setTraceLogLimit] = useState(20);
   const [skipPluginsByDefault, setSkipPluginsByDefault] = useState(false);
+  const [devModePersist, setDevModePersist] = useState(true);
   const [toolbarConfig, setToolbarConfig] = useState<ToolbarConfig>(DEFAULT_TOOLBAR_CONFIG);
   const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null);
   const [draggedButton, setDraggedButton] = useState<{ buttonId: string; fromSectionId: SectionId } | null>(null);
@@ -253,6 +254,7 @@ const Popup: React.FC = () => {
       'schemaOverlayColor',
       'traceLogLimit',
       'skipPluginsByDefault',
+      'devModePersist',
       'toolbarConfig'
     ], (result) => {
       if (result.showTool !== undefined) {
@@ -272,6 +274,9 @@ const Popup: React.FC = () => {
       }
       if (result.skipPluginsByDefault !== undefined) {
         setSkipPluginsByDefault(result.skipPluginsByDefault);
+      }
+      if (result.devModePersist !== undefined) {
+        setDevModePersist(result.devModePersist);
       }
       if (result.toolbarConfig !== undefined) {
         setToolbarConfig(normalizeToolbarConfig(result.toolbarConfig));
@@ -307,6 +312,11 @@ const Popup: React.FC = () => {
   const handleSkipPluginsByDefaultChange = (value: boolean) => {
     setSkipPluginsByDefault(value);
     chrome.storage.sync.set({ skipPluginsByDefault: value });
+  };
+
+  const handleDevModePersistChange = (value: boolean) => {
+    setDevModePersist(value);
+    chrome.storage.sync.set({ devModePersist: value });
   };
 
   const handleSectionOrderChange = (newOrder: SectionId[]) => {
@@ -846,6 +856,29 @@ const Popup: React.FC = () => {
                 <button
                   className={`toggle-btn ${!skipPluginsByDefault ? 'toggle-no' : ''}`}
                   onClick={() => handleSkipPluginsByDefaultChange(false)}
+                >
+                  Off
+                </button>
+              </div>
+            </section>
+
+            <section className="info-section settings-row">
+              <div className="settings-label">
+                <p className="settings-description">
+                  <span className="settings-icon" aria-hidden="true">&#128268;</span>
+                  Keep Dev Mode active across page navigations
+                </p>
+              </div>
+              <div className="settings-toggle">
+                <button
+                  className={`toggle-btn ${devModePersist ? 'toggle-yes' : ''}`}
+                  onClick={() => handleDevModePersistChange(true)}
+                >
+                  On
+                </button>
+                <button
+                  className={`toggle-btn ${!devModePersist ? 'toggle-no' : ''}`}
+                  onClick={() => handleDevModePersistChange(false)}
                 >
                   Off
                 </button>

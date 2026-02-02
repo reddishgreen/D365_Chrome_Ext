@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { CrmApi } from '../utils/api';
-import { SelectedEntity, JoinedEntity, QueryFilter, AttributeMetadata } from '../types';
+import { SelectedEntity, JoinedEntity, QueryFilter, AttributeMetadata, OptionSetValue } from '../types';
 import EnhancedSelect from './EnhancedSelect';
 
 interface FilterBuilderProps {
@@ -9,6 +9,9 @@ interface FilterBuilderProps {
   filters: QueryFilter;
   onChange: (filters: QueryFilter) => void;
 }
+
+// Cache key for option set values: "entityLogicalName:attributeLogicalName"
+type OptionSetCache = Record<string, OptionSetValue[] | 'loading' | 'none'>;
 
 const OPERATORS = [
   // Basic Operators
@@ -72,10 +75,18 @@ const OPERATORS = [
   { value: 'last-fiscal-period', label: 'Last Fiscal Period', types: ['DateTime'] },
   { value: 'next-fiscal-year', label: 'Next Fiscal Year', types: ['DateTime'] },
   { value: 'next-fiscal-period', label: 'Next Fiscal Period', types: ['DateTime'] },
+
+  // Quarterly Operators
+  { value: 'this-quarter', label: 'This Quarter', types: ['DateTime'] },
+  { value: 'last-quarter', label: 'Last Quarter', types: ['DateTime'] },
+  { value: 'next-quarter', label: 'Next Quarter', types: ['DateTime'] },
+  { value: 'last-x-quarters', label: 'Last X Quarters', types: ['DateTime'], needsValue: true },
+  { value: 'next-x-quarters', label: 'Next X Quarters', types: ['DateTime'], needsValue: true },
 ];
 
 const FilterBuilder: React.FC<FilterBuilderProps> = ({ api, entities, filters, onChange }) => {
   const [attrCache, setAttrCache] = useState<Record<string, AttributeMetadata[]>>({});
+  const [optionSetCache, setOptionSetCache] = useState<OptionSetCache>({});
 
   useEffect(() => {
     if (!api) return;
@@ -88,6 +99,37 @@ const FilterBuilder: React.FC<FilterBuilderProps> = ({ api, entities, filters, o
       }
     });
   }, [api, entities]);
+
+  // Function to fetch option set values for an attribute
+  const fetchOptionSetValues = useCallback(async (entityLogicalName: string, attributeLogicalName: string) => {
+    if (!api) return;
+
+    const cacheKey = `${entityLogicalName}:${attributeLogicalName}`;
+
+    // Skip if already cached or loading
+    if (optionSetCache[cacheKey]) return;
+
+    // Mark as loading
+    setOptionSetCache(prev => ({ ...prev, [cacheKey]: 'loading' }));
+
+    try {
+      const options = await api.getOptionSetValues(entityLogicalName, attributeLogicalName);
+      setOptionSetCache(prev => ({
+        ...prev,
+        [cacheKey]: options.length > 0 ? options : 'none'
+      }));
+    } catch (e) {
+      setOptionSetCache(prev => ({ ...prev, [cacheKey]: 'none' }));
+    }
+  }, [api, optionSetCache]);
+
+  // Helper to get option set values from cache
+  const getOptionSetValues = (entityLogicalName: string, attributeLogicalName: string): OptionSetValue[] | null => {
+    const cacheKey = `${entityLogicalName}:${attributeLogicalName}`;
+    const cached = optionSetCache[cacheKey];
+    if (cached === 'loading' || cached === 'none' || !cached) return null;
+    return cached;
+  };
 
   const updateFilter = (id: string, changes: Partial<QueryFilter>) => {
     const updateRecursive = (node: QueryFilter): QueryFilter => {
@@ -247,6 +289,7 @@ const FilterBuilder: React.FC<FilterBuilderProps> = ({ api, entities, filters, o
         'this-week', 'last-week', 'next-week',
         'this-month', 'last-month', 'next-month',
         'this-year', 'last-year', 'next-year',
+        'this-quarter', 'last-quarter', 'next-quarter',
         'this-fiscal-year', 'last-fiscal-year', 'next-fiscal-year',
         'this-fiscal-period', 'last-fiscal-period', 'next-fiscal-period'
       ].includes(node.operator || '');
@@ -306,13 +349,65 @@ const FilterBuilder: React.FC<FilterBuilderProps> = ({ api, entities, filters, o
 
            {needsValue && (
              <div className="filter-row__value">
-               <input
-                 type={selectedAttr?.AttributeType === 'DateTime' || node.operator?.includes('x-') ? (node.operator?.includes('x-') ? 'number' : 'date') : 'text'}
-                 className="qb-input"
-                 value={node.value}
-                 placeholder="Value"
-                 onChange={(e) => updateFilter(node.id, { value: e.target.value })}
-               />
+               {(() => {
+                 // Check if this is an option set field (including Boolean/Two Option)
+                 const isOptionSet = selectedAttr && ['Picklist', 'State', 'Status', 'Boolean'].includes(selectedAttr.AttributeType);
+
+                 if (isOptionSet && entity) {
+                   // Trigger fetch of option set values if not cached
+                   const cacheKey = `${entity.logicalName}:${selectedAttr.LogicalName}`;
+                   if (!optionSetCache[cacheKey]) {
+                     fetchOptionSetValues(entity.logicalName, selectedAttr.LogicalName);
+                   }
+
+                   const options = getOptionSetValues(entity.logicalName, selectedAttr.LogicalName);
+                   const isLoading = optionSetCache[cacheKey] === 'loading';
+
+                   if (options && options.length > 0) {
+                     // Show dropdown with option set values
+                     const selectOptions = [
+                       { value: '', label: 'Select value...' },
+                       ...options.map(opt => ({
+                         value: String(opt.Value),
+                         label: opt.Label,
+                         description: String(opt.Value)
+                       }))
+                     ];
+
+                     return (
+                       <EnhancedSelect
+                         options={selectOptions}
+                         value={String(node.value || '')}
+                         onChange={(value) => updateFilter(node.id, { value: value ? Number(value) : '' })}
+                         searchable={true}
+                         placeholder="Select value..."
+                         size="medium"
+                       />
+                     );
+                   } else if (isLoading) {
+                     return (
+                       <input
+                         type="text"
+                         className="qb-input"
+                         value={node.value || ''}
+                         placeholder="Loading options..."
+                         disabled
+                       />
+                     );
+                   }
+                 }
+
+                 // Default: show regular input
+                 return (
+                   <input
+                     type={selectedAttr?.AttributeType === 'DateTime' || node.operator?.includes('x-') ? (node.operator?.includes('x-') ? 'number' : 'date') : 'text'}
+                     className="qb-input"
+                     value={node.value ?? ''}
+                     placeholder="Value"
+                     onChange={(e) => updateFilter(node.id, { value: e.target.value })}
+                   />
+                 );
+               })()}
              </div>
            )}
 

@@ -7,12 +7,18 @@ export interface EntityMetadata {
   Description?: string;
 }
 
+export interface OptionSetValue {
+  Value: number;
+  Label: string;
+}
+
 export interface AttributeMetadata {
   LogicalName: string;
   DisplayName: string;
   AttributeType: string;
   IsPrimaryId?: boolean;
   IsPrimaryName?: boolean;
+  OptionSetValues?: OptionSetValue[];
 }
 
 export interface AttributeMetadataComplete extends AttributeMetadata {

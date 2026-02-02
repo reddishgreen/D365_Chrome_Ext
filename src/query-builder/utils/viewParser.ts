@@ -17,6 +17,7 @@ export interface ParseResult {
 // Helper to map FetchXML operators to our internal operators
 export const mapFetchXmlOperator = (op: string): string => {
     switch (op) {
+        // Basic operators
         case 'eq': return 'eq';
         case 'ne': return 'ne';
         case 'like': return 'contains'; // We will need to strip %
@@ -29,19 +30,63 @@ export const mapFetchXmlOperator = (op: string): string => {
         case 'le': return 'le';
         case 'null': return 'null';
         case 'not-null': return 'not null';
+
+        // Date-specific comparison operators
+        case 'on': return 'on';
+        case 'on-or-after': return 'on-or-after';
+        case 'on-or-before': return 'on-or-before';
+
+        // Relative date operators - Daily
         case 'today': return 'today';
         case 'yesterday': return 'yesterday';
         case 'tomorrow': return 'tomorrow';
+        case 'last-x-days': return 'last-x-days';
+        case 'next-x-days': return 'next-x-days';
+        case 'older-than-x-days': return 'older-than-x-days';
+
+        // Relative date operators - Weekly
         case 'this-week': return 'this-week';
         case 'last-week': return 'last-week';
         case 'next-week': return 'next-week';
-        case 'last-x-days': return 'last-x-days';
-        case 'next-x-days': return 'next-x-days';
+        case 'last-x-weeks': return 'last-x-weeks';
+        case 'next-x-weeks': return 'next-x-weeks';
+
+        // Relative date operators - Monthly
+        case 'this-month': return 'this-month';
+        case 'last-month': return 'last-month';
+        case 'next-month': return 'next-month';
         case 'last-x-months': return 'last-x-months';
         case 'next-x-months': return 'next-x-months';
+        case 'older-than-x-months': return 'older-than-x-months';
+
+        // Relative date operators - Yearly
+        case 'this-year': return 'this-year';
+        case 'last-year': return 'last-year';
+        case 'next-year': return 'next-year';
         case 'last-x-years': return 'last-x-years';
-        // Add more as needed
-        default: return 'eq'; // Fallback
+        case 'next-x-years': return 'next-x-years';
+        case 'older-than-x-years': return 'older-than-x-years';
+
+        // Fiscal period operators
+        case 'this-fiscal-year': return 'this-fiscal-year';
+        case 'last-fiscal-year': return 'last-fiscal-year';
+        case 'next-fiscal-year': return 'next-fiscal-year';
+        case 'this-fiscal-period': return 'this-fiscal-period';
+        case 'last-fiscal-period': return 'last-fiscal-period';
+        case 'next-fiscal-period': return 'next-fiscal-period';
+
+        // Quarterly operators
+        case 'this-quarter': return 'this-quarter';
+        case 'last-quarter': return 'last-quarter';
+        case 'next-quarter': return 'next-quarter';
+        case 'last-x-quarters': return 'last-x-quarters';
+        case 'next-x-quarters': return 'next-x-quarters';
+
+        default:
+            // If operator is not mapped, preserve it as-is rather than defaulting to 'eq'
+            // This allows dynamic date operators to pass through even if not explicitly listed
+            console.warn(`Unknown FetchXML operator: ${op}, passing through as-is`);
+            return op;
     }
 };
 

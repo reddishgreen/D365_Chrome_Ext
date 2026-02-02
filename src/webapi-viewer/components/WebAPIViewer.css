@@ -170,6 +170,24 @@
   outline-offset: 1px;
 }
 
+.clear-field-btn {
+  background: none;
+  border: 1px solid #c0392b;
+  border-radius: 3px;
+  color: #c0392b;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 6px;
+  margin-left: 4px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+
+.clear-field-btn:hover {
+  background: #c0392b;
+  color: #fff;
+}
+
 .edit-lookup {
   border-color: #ffa500;
   background: #fff8e1;

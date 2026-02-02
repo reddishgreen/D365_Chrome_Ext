@@ -164,8 +164,8 @@ export function generatePromptMarkdown(
       lines.push('');
 
       selectedFields.forEach(attr => {
-        lines.push(`- **\`${attr.LogicalName}\`** (Display: ${attr.DisplayName})`);
-        
+        lines.push(`- \`${attr.LogicalName}\` (Display: ${attr.DisplayName})`);
+
         if (options.verbosity === 'compact') {
           lines.push(`  - Type: ${attr.AttributeType}`);
           if (attr.RequiredLevel === 'ApplicationRequired' || attr.RequiredLevel === 'SystemRequired') {
@@ -173,6 +173,17 @@ export function generatePromptMarkdown(
           }
           if (attr.LookupTargets && attr.LookupTargets.length > 0) {
             lines.push(`  - Lookup Targets: ${attr.LookupTargets.join(', ')}`);
+          }
+          // Option sets (compact - first 10)
+          if (attr.OptionSetValues && attr.OptionSetValues.length > 0) {
+            const displayValues = attr.OptionSetValues.slice(0, 10).map(opt =>
+              `${opt.Value} = ${opt.Label}`
+            ).join(', ');
+            if (attr.OptionSetValues.length > 10) {
+              lines.push(`  - Options: ${displayValues}... (+${attr.OptionSetValues.length - 10} more)`);
+            } else {
+              lines.push(`  - Options: ${displayValues}`);
+            }
           }
         } else if (options.verbosity === 'standard') {
           lines.push(`  - Type: ${attr.AttributeType}`);
@@ -200,33 +211,29 @@ export function generatePromptMarkdown(
 
           // Option sets (truncated to 50)
           if (attr.OptionSetValues && attr.OptionSetValues.length > 0) {
-            const displayValues = attr.OptionSetValues.slice(0, 50).map(opt => 
-              `${opt.Value}: ${opt.Label}`
+            const displayValues = attr.OptionSetValues.slice(0, 50).map(opt =>
+              `${opt.Value} = ${opt.Label}`
             ).join(', ');
             if (attr.OptionSetValues.length > 50) {
-              lines.push(`  - Option Set Values (first 50 of ${attr.OptionSetValues.length}): ${displayValues}...`);
+              lines.push(`  - Options (first 50 of ${attr.OptionSetValues.length}): ${displayValues}...`);
             } else {
-              lines.push(`  - Option Set Values: ${displayValues}`);
+              lines.push(`  - Options: ${displayValues}`);
             }
           }
 
           if (attr.LookupTargets && attr.LookupTargets.length > 0) {
             lines.push(`  - Lookup Targets: ${attr.LookupTargets.join(', ')}`);
             if (attr.IsPolymorphic) {
-              lines.push(`  - **Note**: Polymorphic lookup (Customer/Regarding type)`);
+              lines.push(`  - Note: Polymorphic lookup (Customer/Regarding type)`);
             }
           }
 
-          if (attr.IsActivityParty) {
-            lines.push(`  - **Note**: Activity party field (from/to)`);
-          }
-
           if (attr.IsCalculated) {
-            lines.push(`  - **Note**: Calculated field`);
+            lines.push(`  - Note: Calculated field`);
           }
 
           if (attr.IsRollup) {
-            lines.push(`  - **Note**: Rollup field`);
+            lines.push(`  - Note: Rollup field`);
           }
         } else {
           // Full verbosity
@@ -253,9 +260,9 @@ export function generatePromptMarkdown(
 
           // Full option set values
           if (attr.OptionSetValues && attr.OptionSetValues.length > 0) {
-            lines.push(`  - Option Set Values (${attr.OptionSetValues.length}):`);
+            lines.push(`  - Options (${attr.OptionSetValues.length}):`);
             attr.OptionSetValues.forEach(opt => {
-              lines.push(`    - ${opt.Value}: ${opt.Label}`);
+              lines.push(`    - ${opt.Value} = ${opt.Label}`);
             });
           }
 
@@ -264,10 +271,6 @@ export function generatePromptMarkdown(
             if (attr.IsPolymorphic) {
               lines.push(`  - Polymorphic: Yes`);
             }
-          }
-
-          if (attr.IsActivityParty) {
-            lines.push(`  - Activity Party: Yes`);
           }
 
           if (attr.IsCalculated) {
@@ -342,36 +345,44 @@ export function generatePromptMarkdown(
         const targetEntity = metadataMap.get(relationship.ReferencedEntity);
         const sourceName = sourceEntity?.DisplayName || relationship.ReferencingEntity;
         const targetName = targetEntity?.DisplayName || relationship.ReferencedEntity;
+        const sourceEntitySet = sourceEntity?.EntitySetName || relationship.ReferencingEntity;
+        const targetEntitySet = targetEntity?.EntitySetName || relationship.ReferencedEntity;
         const isSelfReferencing = relationship.ReferencingEntity === relationship.ReferencedEntity;
 
         lines.push(`- **${relationship.SchemaName}**`);
         if (isSelfReferencing) {
-          lines.push(`  - **Self-referencing relationship**: ${sourceName} → ${sourceName}`);
+          lines.push(`  - Self-referencing relationship: ${sourceName} → ${sourceName}`);
         } else {
           lines.push(`  - ${sourceName} → ${targetName}`);
         }
         lines.push(`  - Schema Name: \`${relationship.SchemaName}\``);
         lines.push(`  - Type: ${relationship.RelationshipType}`);
-        
+        lines.push(`  - Source Entity Set: \`${sourceEntitySet}\``);
+        lines.push(`  - Target Entity Set: \`${targetEntitySet}\``);
+
         // Lookup Attribute (referencing attribute) - this is NOT a navigation property
         if (relationship.ReferencingAttribute) {
-          lines.push(`  - **Lookup Attribute** (on ${sourceName}): \`${relationship.ReferencingAttribute}\``);
+          lines.push(`  - Lookup Attribute (on ${sourceName}): \`${relationship.ReferencingAttribute}\``);
         }
-        
-        // Navigation properties - only show if available in metadata
+
+        // Navigation properties with $expand examples
         if (relationship.RelationshipType === 'OneToMany' && relationship.ReferencingEntityNavigationPropertyName) {
-          lines.push(`  - **Collection-valued Navigation Property** (1:N, on ${sourceName}): \`${relationship.ReferencingEntityNavigationPropertyName}\``);
+          lines.push(`  - Collection Navigation Property (1:N): \`${relationship.ReferencingEntityNavigationPropertyName}\``);
+          lines.push(`  - Example \`$expand\`: \`/${sourceEntitySet}?$expand=${relationship.ReferencingEntityNavigationPropertyName}($select=...)\``);
         } else if (relationship.RelationshipType === 'ManyToOne' && relationship.ReferencedEntityNavigationPropertyName) {
-          lines.push(`  - **Single-valued Navigation Property** (N:1, on ${sourceName}): \`${relationship.ReferencedEntityNavigationPropertyName}\``);
+          lines.push(`  - Single-valued Navigation Property (N:1): \`${relationship.ReferencedEntityNavigationPropertyName}\``);
+          lines.push(`  - Example \`$expand\`: \`/${sourceEntitySet}?$expand=${relationship.ReferencedEntityNavigationPropertyName}($select=...)\``);
         } else if (relationship.RelationshipType === 'ManyToMany') {
           if (relationship.ReferencingEntityNavigationPropertyName) {
-            lines.push(`  - **Collection-valued Navigation Property** (M:N, on ${sourceName}): \`${relationship.ReferencingEntityNavigationPropertyName}\``);
+            lines.push(`  - Collection Navigation Property (M:N, on ${sourceName}): \`${relationship.ReferencingEntityNavigationPropertyName}\``);
+            lines.push(`  - Example \`$expand\`: \`/${sourceEntitySet}?$expand=${relationship.ReferencingEntityNavigationPropertyName}($select=...)\``);
           }
           if (relationship.ReferencedEntityNavigationPropertyName) {
-            lines.push(`  - **Collection-valued Navigation Property** (M:N, on ${targetName}): \`${relationship.ReferencedEntityNavigationPropertyName}\``);
+            lines.push(`  - Collection Navigation Property (M:N, on ${targetName}): \`${relationship.ReferencedEntityNavigationPropertyName}\``);
+            lines.push(`  - Example \`$expand\`: \`/${targetEntitySet}?$expand=${relationship.ReferencedEntityNavigationPropertyName}($select=...)\``);
           }
         }
-        
+
         lines.push('');
       });
     });

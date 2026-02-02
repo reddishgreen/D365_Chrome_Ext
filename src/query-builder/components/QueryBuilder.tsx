@@ -10,6 +10,7 @@ import ResultsTable from './ResultsTable';
 import ViewSelector from './ViewSelector';
 import { buildODataQuery } from '../utils/odata';
 import { parseViewFetchXml } from '../utils/viewParser';
+import { exportToCSV, exportToExcel } from '../utils/export';
 
 interface QueryBuilderProps {
   orgUrl?: string;
@@ -36,6 +37,12 @@ const QueryBuilder: React.FC<QueryBuilderProps> = ({ orgUrl: propOrgUrl, onClose
   // Tab state
   const [activeTab, setActiveTab] = useState<'builder' | 'results'>('builder');
   const [showRelationshipManager, setShowRelationshipManager] = useState(false);
+
+  // Export state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ fetched: number; complete: boolean } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (propOrgUrl) {
@@ -156,6 +163,47 @@ const QueryBuilder: React.FC<QueryBuilderProps> = ({ orgUrl: propOrgUrl, onClose
       onClose();
     } else {
       window.close();
+    }
+  };
+
+  const handleExport = async (format: 'csv' | 'excel', exportAll: boolean) => {
+    if (!api || !selectedEntity) return;
+
+    setExporting(true);
+    setExportError(null);
+    setExportProgress(null);
+
+    try {
+      let dataToExport: any[];
+
+      if (exportAll) {
+        // Fetch ALL records (handles pagination)
+        const query = buildODataQuery(selectedEntity, joinedEntities, selectedColumns, filters);
+        dataToExport = await api.fetchAllPages(query, (fetched, complete) => {
+          setExportProgress({ fetched, complete });
+        });
+      } else {
+        // Export current results only
+        dataToExport = results;
+      }
+
+      // Generate filename with entity name and timestamp
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const filename = `${selectedEntity.displayName}_${timestamp}`;
+
+      if (format === 'csv') {
+        exportToCSV(dataToExport, selectedColumns, allEntities, filename);
+      } else {
+        exportToExcel(dataToExport, selectedColumns, allEntities, filename, propOrgUrl);
+      }
+
+      setShowExportModal(false);
+    } catch (err) {
+      console.error('Export error:', err);
+      setExportError(err instanceof Error ? err.message : 'An error occurred during export');
+    } finally {
+      setExporting(false);
+      setExportProgress(null);
     }
   };
 
@@ -345,6 +393,17 @@ const QueryBuilder: React.FC<QueryBuilderProps> = ({ orgUrl: propOrgUrl, onClose
                         </>
                       )}
                     </button>
+                    <button
+                      className="qb-btn qb-btn-secondary qb-btn--medium"
+                      onClick={() => setShowExportModal(true)}
+                      disabled={loading || results.length === 0}
+                      title="Export results to CSV or Excel"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="qb-icon">
+                        <path d="M7 1v8M7 9L4 6M7 9l3-3M2 11h10v2H2v-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Export
+                    </button>
                   </div>
                 </div>
 
@@ -370,6 +429,112 @@ const QueryBuilder: React.FC<QueryBuilderProps> = ({ orgUrl: propOrgUrl, onClose
             )}
           </div>
         </div>
+
+        {/* Export Modal */}
+        {showExportModal && (
+          <div className="export-modal-overlay" onClick={() => !exporting && setShowExportModal(false)}>
+            <div className="export-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="export-modal__header">
+                <h2>Export Results</h2>
+                <button
+                  className="export-modal__close"
+                  onClick={() => !exporting && setShowExportModal(false)}
+                  disabled={exporting}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="export-modal__body">
+                {exportError && (
+                  <div className="export-modal__error">
+                    {exportError}
+                  </div>
+                )}
+
+                {exporting ? (
+                  <div className="export-modal__progress">
+                    <div className="spinner"></div>
+                    <p>
+                      {exportProgress
+                        ? `Fetching records... ${exportProgress.fetched.toLocaleString()} records retrieved`
+                        : 'Preparing export...'}
+                    </p>
+                    {exportProgress && !exportProgress.complete && (
+                      <p className="export-modal__progress-hint">
+                        Fetching all pages of data. This may take a while for large datasets.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <p className="export-modal__info">
+                      Current results: <strong>{results.length.toLocaleString()}</strong> records
+                    </p>
+                    <p className="export-modal__description">
+                      Choose to export the current page of results, or fetch and export ALL matching records (ignores the 5,000 record page limit).
+                    </p>
+
+                    <div className="export-modal__section">
+                      <h3>Export Current Results ({results.length.toLocaleString()} records)</h3>
+                      <div className="export-modal__buttons">
+                        <button
+                          className="qb-btn qb-btn-secondary qb-btn--medium"
+                          onClick={() => handleExport('csv', false)}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="qb-icon">
+                            <path d="M2 1h7l3 3v9H2V1z" stroke="currentColor" strokeWidth="1.2"/>
+                            <text x="4" y="10" fontSize="5" fill="currentColor" fontWeight="bold">CSV</text>
+                          </svg>
+                          Download CSV
+                        </button>
+                        <button
+                          className="qb-btn qb-btn-secondary qb-btn--medium"
+                          onClick={() => handleExport('excel', false)}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="qb-icon">
+                            <path d="M2 1h7l3 3v9H2V1z" stroke="#217346" strokeWidth="1.2"/>
+                            <text x="3" y="10" fontSize="5" fill="#217346" fontWeight="bold">XLS</text>
+                          </svg>
+                          Download Excel
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="export-modal__section export-modal__section--highlight">
+                      <h3>Export ALL Matching Records</h3>
+                      <p className="export-modal__note">
+                        This will fetch all pages of data matching your query and filters, bypassing the 5,000 record limit.
+                      </p>
+                      <div className="export-modal__buttons">
+                        <button
+                          className="qb-btn qb-btn-primary qb-btn--medium"
+                          onClick={() => handleExport('csv', true)}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="qb-icon">
+                            <path d="M2 1h7l3 3v9H2V1z" stroke="currentColor" strokeWidth="1.2"/>
+                            <text x="4" y="10" fontSize="5" fill="currentColor" fontWeight="bold">CSV</text>
+                          </svg>
+                          Export All to CSV
+                        </button>
+                        <button
+                          className="qb-btn qb-btn-primary qb-btn--medium"
+                          onClick={() => handleExport('excel', true)}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="qb-icon">
+                            <path d="M2 1h7l3 3v9H2V1z" stroke="currentColor" strokeWidth="1.2"/>
+                            <text x="3" y="10" fontSize="5" fill="currentColor" fontWeight="bold">XLS</text>
+                          </svg>
+                          Export All to Excel
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -216,7 +216,7 @@ const D365Toolbar: React.FC = () => {
       return { sectionOrder, buttonVisibility, sectionLabels, sectionButtons: normalizedSectionButtons };
     };
 
-    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit', 'toolbarConfig', 'devModeActive'], (result) => {
+    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit', 'toolbarConfig', 'devModeActive', 'devModePersist'], (result) => {
       if (result.notificationDuration !== undefined) {
         setNotificationDuration(result.notificationDuration);
       }
@@ -230,10 +230,14 @@ const D365Toolbar: React.FC = () => {
         setToolbarConfig(normalizeToolbarConfig(result.toolbarConfig));
       }
       // Load Dev Mode state from storage and apply if enabled
-      // Note: applyDevMode will be called after it's defined, via a separate effect
-      if (result.devModeActive === true) {
+      // Only restore Dev Mode if persistence is on (default true)
+      const persistEnabled = result.devModePersist !== false;
+      if (result.devModeActive === true && persistEnabled) {
         setDevModeActive(true);
         devModeActiveRef.current = true;
+      } else if (result.devModeActive === true && !persistEnabled) {
+        // Persist is off - clear the stored state so it doesn't linger
+        chrome.storage.sync.set({ devModeActive: false });
       }
     });
 
@@ -620,16 +624,25 @@ const D365Toolbar: React.FC = () => {
           resetFieldsBlur();
         } else {
           // Still on a form page - check if Dev Mode should stay active
-          chrome.storage.sync.get(['devModeActive'], (result) => {
+          chrome.storage.sync.get(['devModeActive', 'devModePersist'], (result) => {
             const shouldBeActive = result.devModeActive === true;
-            if (shouldBeActive) {
+            const persistEnabled = result.devModePersist !== false; // default true for backwards compat
+            if (shouldBeActive && persistEnabled) {
               // Keep Dev Mode on, but re-apply it for the newly loaded form.
               console.log('[D365 Helper] Staying on form page, reapplying Dev Mode');
               scheduleDevModeReapply(1500);
             } else {
-              resetSchemaOverlay();
-              resetFieldsVisibility();
-              resetSectionsVisibility();
+              // Persistence is off or Dev Mode is inactive - deactivate
+              if (shouldBeActive && !persistEnabled && devModeActiveRef.current && removeDevModeRef.current) {
+                console.log('[D365 Helper] Dev Mode persist is off, deactivating on navigation');
+                removeDevModeRef.current(true).catch((error) => {
+                  console.error('[D365 Helper] Failed to deactivate Dev Mode:', error);
+                });
+              } else {
+                resetSchemaOverlay();
+                resetFieldsVisibility();
+                resetSectionsVisibility();
+              }
             }
           });
           resetFieldsBlur();

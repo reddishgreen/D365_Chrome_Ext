@@ -163,6 +163,13 @@ export const buildODataQuery = (
         case 'next-fiscal-year': return `Microsoft.Dynamics.CRM.InFiscalYear(PropertyName='${attributePath}',PropertyValue=1)`;
         case 'next-fiscal-period': return `Microsoft.Dynamics.CRM.InFiscalPeriod(PropertyName='${attributePath}',PropertyValue=1)`;
 
+        // Quarterly Operators
+        case 'this-quarter': return `Microsoft.Dynamics.CRM.ThisFiscalQuarter(PropertyName='${attributePath}')`;
+        case 'last-quarter': return `Microsoft.Dynamics.CRM.LastFiscalQuarter(PropertyName='${attributePath}')`;
+        case 'next-quarter': return `Microsoft.Dynamics.CRM.NextFiscalQuarter(PropertyName='${attributePath}')`;
+        case 'last-x-quarters': return `Microsoft.Dynamics.CRM.LastXFiscalQuarters(PropertyName='${attributePath}',PropertyValue=${val})`;
+        case 'next-x-quarters': return `Microsoft.Dynamics.CRM.NextXFiscalQuarters(PropertyName='${attributePath}',PropertyValue=${val})`;
+
         default: return '';
       }
     }
