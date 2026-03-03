@@ -1,9 +1,18 @@
+export interface EntityInfo {
+  LogicalName: string;
+  DisplayName: string;
+  EntitySetName: string;
+  PrimaryIdAttribute: string;
+  PrimaryNameAttribute: string | null;
+}
+
 export class D365Helper {
   private overlayElements: HTMLElement[] = [];
   private requestCounter = 0;
   private headerObserver: MutationObserver | null = null;
   private headerFieldsInfo: any[] = [];
   private overlayColor: string = '#4bbf0d';
+  private entityCache: EntityInfo[] | null = null;
 
   constructor() {
     // Communication happens via custom events with injected script
@@ -127,6 +136,138 @@ export class D365Helper {
       return entityName + 'es';
     } else {
       return entityName + 's';
+    }
+  }
+
+  // Rollback a field to a previous value via WebAPI PATCH
+  async rollbackFields(
+    changes: { fieldName: string; oldValue: string }[],
+    skipPlugins: boolean = false
+  ): Promise<boolean> {
+    const entityName = await this.getEntityName();
+    const recordId = await this.getRecordId();
+
+    if (!entityName || !recordId) {
+      throw new Error('Could not determine current record context');
+    }
+
+    const orgUrl = this.getOrgUrl();
+    const entitySetName = this.getEntitySetName(entityName);
+    const apiUrl = `${orgUrl}/api/data/v9.2/${entitySetName}(${recordId})`;
+
+    // Build the PATCH payload
+    const payload: Record<string, any> = {};
+    for (const change of changes) {
+      let value: any = change.oldValue;
+
+      // Try to coerce back to original type
+      if (value === '' || value === null || value === undefined) {
+        value = null;
+      } else if (value === 'true') {
+        value = true;
+      } else if (value === 'false') {
+        value = false;
+      } else if (!isNaN(Number(value)) && value.trim() !== '') {
+        value = Number(value);
+      }
+
+      payload[change.fieldName] = value;
+    }
+
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'OData-MaxVersion': '4.0',
+      'OData-Version': '4.0',
+    };
+
+    if (skipPlugins) {
+      headers['MSCRM.SuppressCallbackRegistrationExpanderJob'] = 'true';
+      headers['MSCRM.BypassCustomPluginExecution'] = 'true';
+    }
+
+    const response = await fetch(apiUrl, {
+      method: 'PATCH',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Rollback failed (${response.status}): ${errorText}`);
+    }
+
+    return true;
+  }
+
+  // Get all entities with caching
+  async getAllEntities(): Promise<EntityInfo[]> {
+    if (this.entityCache) return this.entityCache;
+
+    const orgUrl = this.getOrgUrl();
+    const url = `${orgUrl}/api/data/v9.2/EntityDefinitions?$select=LogicalName,DisplayName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute`;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load entities (${response.status})`);
+      }
+
+      const data = await response.json();
+      const entities: EntityInfo[] = (data.value || []).map((e: any) => ({
+        LogicalName: e.LogicalName,
+        DisplayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+        EntitySetName: e.EntitySetName,
+        PrimaryIdAttribute: e.PrimaryIdAttribute,
+        PrimaryNameAttribute: e.PrimaryNameAttribute ?? null,
+      }));
+
+      entities.sort((a, b) =>
+        (a.DisplayName || a.LogicalName).localeCompare(b.DisplayName || b.LogicalName)
+      );
+
+      this.entityCache = entities;
+      return entities;
+    } catch (err) {
+      // Fallback without $select
+      const fallbackUrl = `${orgUrl}/api/data/v9.2/EntityDefinitions`;
+      const response = await fetch(fallbackUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load entities (${response.status})`);
+      }
+
+      const data = await response.json();
+      const entities: EntityInfo[] = (data.value || []).map((e: any) => ({
+        LogicalName: e.LogicalName,
+        DisplayName: e.DisplayName?.UserLocalizedLabel?.Label || e.LogicalName,
+        EntitySetName: e.EntitySetName,
+        PrimaryIdAttribute: e.PrimaryIdAttribute,
+        PrimaryNameAttribute: e.PrimaryNameAttribute ?? null,
+      }));
+
+      entities.sort((a, b) =>
+        (a.DisplayName || a.LogicalName).localeCompare(b.DisplayName || b.LogicalName)
+      );
+
+      this.entityCache = entities;
+      return entities;
     }
   }
 

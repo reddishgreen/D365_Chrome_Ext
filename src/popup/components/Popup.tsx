@@ -83,7 +83,8 @@ const DEFAULT_SECTIONS: SectionConfig[] = [
       { id: 'tools.odataFields', label: 'OData Fields', description: 'View OData field metadata' },
       { id: 'tools.auditHistory', label: 'Audit History', description: 'View audit history' },
       { id: 'tools.formEditor', label: 'Form Editor', description: 'Open form editor' },
-      { id: 'tools.promptMaker', label: 'AI Prompt Maker', description: 'Generate context prompts for AI assistants' }
+      { id: 'tools.promptMaker', label: 'AI Prompt Maker', description: 'Generate context prompts for AI assistants' },
+      { id: 'tools.navigateTo', label: 'Navigate To', description: 'Navigate to a record by entity and ID' }
     ]
   }
 ];
@@ -112,7 +113,8 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
     'tools.odataFields': true,
     'tools.auditHistory': true,
     'tools.formEditor': false,
-    'tools.promptMaker': true
+    'tools.promptMaker': true,
+    'tools.navigateTo': true
   },
   sectionLabels: {
     devtools: 'Form Controls',
@@ -139,7 +141,8 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
       'tools.odataFields',
       'tools.auditHistory',
       'tools.formEditor',
-      'tools.promptMaker'
+      'tools.promptMaker',
+      'tools.navigateTo'
     ],
     sections: ['sections.showAll'],
     fields: ['fields.showAll'],

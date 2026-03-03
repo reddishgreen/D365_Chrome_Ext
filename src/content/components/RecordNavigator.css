@@ -1,0 +1,329 @@
+/* Record Navigator Modal Styles */
+.d365-navigate-modal {
+  max-width: 520px;
+  width: 90%;
+  min-height: 480px;
+}
+
+.d365-navigate-header {
+  background: linear-gradient(135deg, #0C274C 0%, #1a3d6b 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.d365-navigate-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.d365-navigate-content {
+  padding: 20px;
+  flex: 1;
+  overflow: visible;
+}
+
+.d365-navigate-loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.d365-navigate-spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #0C274C;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: d365-nav-spin 1s linear infinite;
+  margin: 0 auto 15px;
+}
+
+@keyframes d365-nav-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.d365-navigate-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.d365-navigate-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.d365-navigate-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Entity search input */
+.d365-navigate-search {
+  position: relative;
+}
+
+.d365-navigate-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.d365-navigate-input:focus {
+  outline: none;
+  border-color: #0C274C;
+  box-shadow: 0 0 0 3px rgba(12, 39, 76, 0.1);
+}
+
+.d365-navigate-input::placeholder {
+  color: #999;
+}
+
+.d365-navigate-input.invalid {
+  border-color: #dc3545;
+}
+
+.d365-navigate-input.invalid:focus {
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+/* Entity dropdown results */
+.d365-navigate-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.d365-navigate-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  font-size: 13px;
+  transition: background 0.15s ease;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.d365-navigate-result:hover,
+.d365-navigate-result--active {
+  background: rgba(12, 39, 76, 0.08);
+}
+
+.d365-navigate-result-name {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.d365-navigate-result-logical {
+  font-size: 11px;
+  color: #888;
+  font-family: 'Consolas', 'Courier New', monospace;
+  flex-shrink: 0;
+}
+
+.d365-navigate-no-results {
+  padding: 16px;
+  text-align: center;
+  color: #666;
+  font-size: 13px;
+}
+
+.d365-navigate-more {
+  padding: 8px 14px;
+  text-align: center;
+  color: #666;
+  font-size: 11px;
+  font-style: italic;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* Selected entity chip */
+.d365-navigate-selected {
+  background: #e8f4fd;
+  border: 1px solid #b3d7f2;
+  border-radius: 6px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.d365-navigate-selected-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.d365-navigate-selected-name {
+  font-weight: 600;
+  color: #0C274C;
+  font-size: 14px;
+}
+
+.d365-navigate-selected-logical {
+  font-size: 11px;
+  color: #666;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.d365-navigate-clear-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.d365-navigate-clear-btn:hover {
+  color: #dc3545;
+  background: rgba(220, 53, 69, 0.08);
+}
+
+/* GUID input */
+.d365-navigate-guid-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  letter-spacing: 0.3px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.d365-navigate-guid-input:focus {
+  outline: none;
+  border-color: #0C274C;
+  box-shadow: 0 0 0 3px rgba(12, 39, 76, 0.1);
+}
+
+.d365-navigate-guid-input::placeholder {
+  color: #bbb;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  letter-spacing: 0;
+}
+
+.d365-navigate-guid-input.invalid {
+  border-color: #dc3545;
+}
+
+.d365-navigate-guid-input.invalid:focus {
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+.d365-navigate-guid-hint {
+  font-size: 11px;
+  color: #999;
+}
+
+.d365-navigate-guid-error {
+  font-size: 11px;
+  color: #dc3545;
+  font-weight: 500;
+}
+
+/* Footer with action buttons */
+.d365-navigate-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.d365-navigate-btn {
+  padding: 9px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.d365-navigate-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.d365-navigate-btn-cancel {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.d365-navigate-btn-cancel:hover:not(:disabled) {
+  background: #d0d0d0;
+}
+
+.d365-navigate-btn-secondary {
+  background: white;
+  color: #0C274C;
+  border: 1px solid #0C274C;
+}
+
+.d365-navigate-btn-secondary:hover:not(:disabled) {
+  background: #e8f4fd;
+}
+
+.d365-navigate-btn-primary {
+  background: #0C274C;
+  color: white;
+}
+
+.d365-navigate-btn-primary:hover:not(:disabled) {
+  background: #1a3d6b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(12, 39, 76, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .d365-navigate-modal {
+    width: 95%;
+    max-width: none;
+  }
+
+  .d365-navigate-footer {
+    flex-direction: column;
+  }
+
+  .d365-navigate-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

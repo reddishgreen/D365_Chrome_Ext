@@ -8,6 +8,8 @@ import ODataFieldsViewer, { ODataFieldsData } from './ODataFieldsViewer';
 import AuditHistoryViewer, { AuditHistoryData } from './AuditHistoryViewer';
 import QueryBuilder from '../../query-builder/components/QueryBuilder';
 import ImpersonationSelector, { ImpersonationData, SystemUser } from './ImpersonationSelector';
+import RecordNavigator from './RecordNavigator';
+import { EntityInfo } from '../utils/D365Helper';
 import PromptMakerViewer from './PromptMakerViewer';
 
 // Toolbar configuration types
@@ -48,7 +50,8 @@ const DEFAULT_SECTION_BUTTONS: Record<SectionId, string[]> = {
     'tools.odataFields',
     'tools.auditHistory',
     'tools.formEditor',
-    'tools.promptMaker'
+    'tools.promptMaker',
+    'tools.navigateTo'
   ]
 };
 
@@ -76,7 +79,8 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
     'tools.odataFields': true,
     'tools.auditHistory': true,
     'tools.formEditor': false,
-    'tools.promptMaker': true
+    'tools.promptMaker': true,
+    'tools.navigateTo': true
   },
   sectionLabels: {
     devtools: 'Form Controls',
@@ -102,7 +106,8 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
       'tools.jsLibraries',
       'tools.odataFields',
       'tools.auditHistory',
-      'tools.formEditor'
+      'tools.formEditor',
+      'tools.navigateTo'
     ],
     sections: ['sections.showAll'],
     fields: ['fields.showAll'],
@@ -137,6 +142,9 @@ const D365Toolbar: React.FC = () => {
   const [showImpersonation, setShowImpersonation] = useState(false);
   const [impersonatedUser, setImpersonatedUser] = useState<SystemUser | null>(null);
   const [impersonationData, setImpersonationData] = useState<ImpersonationData | null>(null);
+  const [showRecordNavigator, setShowRecordNavigator] = useState(false);
+  const [navigatorEntities, setNavigatorEntities] = useState<EntityInfo[] | null>(null);
+  const [navigatorError, setNavigatorError] = useState<string | undefined>(undefined);
   const showSchemaNamesRef = useRef(showSchemaNames);
   const allFieldsVisibleRef = useRef(allFieldsVisible);
   const allSectionsVisibleRef = useRef(allSectionsVisible);
@@ -983,6 +991,50 @@ const D365Toolbar: React.FC = () => {
     setAuditHistoryData(null);
   };
 
+  const handleAuditRollback = async (fieldName: string, oldValue: string, skipPlugins?: boolean): Promise<boolean> => {
+    try {
+      await helper.rollbackFields([{ fieldName, oldValue }], skipPlugins);
+      showNotification(`Rolled back ${fieldName}`);
+      await loadAuditHistory(false);
+      return true;
+    } catch (error: any) {
+      const message = error?.message || 'Rollback failed';
+      showNotification(message);
+      return false;
+    }
+  };
+
+  const handleAuditRollbackGroup = async (changes: { fieldName: string; oldValue: string }[], skipPlugins?: boolean): Promise<boolean> => {
+    try {
+      await helper.rollbackFields(changes, skipPlugins);
+      showNotification(`Rolled back ${changes.length} field${changes.length !== 1 ? 's' : ''}`);
+      await loadAuditHistory(false);
+      return true;
+    } catch (error: any) {
+      const message = error?.message || 'Rollback failed';
+      showNotification(message);
+      return false;
+    }
+  };
+
+  const handleShowRecordNavigator = async () => {
+    setShowRecordNavigator(true);
+    setNavigatorError(undefined);
+    // Load entities if not already cached
+    if (!navigatorEntities) {
+      try {
+        const entities = await helper.getAllEntities();
+        setNavigatorEntities(entities);
+      } catch (error: any) {
+        setNavigatorError(error?.message || 'Failed to load entities');
+      }
+    }
+  };
+
+  const handleCloseRecordNavigator = () => {
+    setShowRecordNavigator(false);
+  };
+
   const handleUnlockFields = async () => {
     try {
       const count = await helper.unlockFields();
@@ -1463,6 +1515,13 @@ const D365Toolbar: React.FC = () => {
           </button>
         );
 
+      case 'tools.navigateTo':
+        return (
+          <button key={buttonId} className="d365-toolbar-btn" onClick={handleShowRecordNavigator} title="Navigate to a record by entity and ID">
+            Navigate To
+          </button>
+        );
+
       default:
         return null;
     }
@@ -1564,9 +1623,20 @@ const D365Toolbar: React.FC = () => {
           data={auditHistoryData}
           onClose={handleCloseAuditHistory}
           onRefresh={handleRefreshAuditHistory}
+          onRollback={handleAuditRollback}
+          onRollbackGroup={handleAuditRollbackGroup}
         />
       )}
       
+      {showRecordNavigator && (
+        <RecordNavigator
+          entities={navigatorEntities}
+          orgUrl={helper.getOrgUrl()}
+          onClose={handleCloseRecordNavigator}
+          error={navigatorError}
+        />
+      )}
+
       {showQueryBuilder && (
         <QueryBuilder
           orgUrl={helper.getOrgUrl()}

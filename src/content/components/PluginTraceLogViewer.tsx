@@ -14,6 +14,8 @@ export interface PluginTraceLogRecord {
   requestId?: string;
   exceptionDetails?: string;
   messageBlock?: string;
+  createdByName?: string;
+  createdById?: string;
 }
 
 export interface PluginTraceLogData {
@@ -31,7 +33,7 @@ interface PluginTraceLogViewerProps {
 
 const formatDateTime = (value?: string): string => {
   if (!value) {
-    return '—';
+    return '\u2014';
   }
   try {
     return new Date(value).toLocaleString();
@@ -42,12 +44,22 @@ const formatDateTime = (value?: string): string => {
 
 const formatDuration = (value?: number): string => {
   if (value === null || value === undefined) {
-    return '—';
+    return '\u2014';
   }
   if (Number.isFinite(value)) {
-    return `${value} ms`;
+    if (value >= 1000) {
+      return `${(value / 1000).toFixed(1)}s`;
+    }
+    return `${value}ms`;
   }
   return String(value);
+};
+
+const formatDurationShort = (value?: number): string => {
+  if (value === null || value === undefined) return '';
+  if (!Number.isFinite(value)) return '';
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
+  return `${value}ms`;
 };
 
 const formatMode = (mode?: number | string): string => {
@@ -59,6 +71,17 @@ const formatMode = (mode?: number | string): string => {
     return mode;
   }
   return 'Unknown';
+};
+
+const formatModeShort = (mode?: number | string): string => {
+  if (mode === 0) return 'Sync';
+  if (mode === 1) return 'Async';
+  if (typeof mode === 'string') {
+    const m = mode.toLowerCase();
+    if (m.includes('sync') && !m.includes('async')) return 'Sync';
+    if (m.includes('async')) return 'Async';
+  }
+  return '';
 };
 
 const hasException = (log: PluginTraceLogRecord): boolean =>
@@ -85,6 +108,24 @@ const getModeKind = (mode?: number | string): 'sync' | 'async' | 'unknown' => {
   return 'unknown';
 };
 
+const truncatePluginName = (name?: string): string => {
+  if (!name) return '';
+  // If it contains dots (namespace), show just the last segment
+  const parts = name.split('.');
+  if (parts.length > 2) {
+    return `...${parts.slice(-2).join('.')}`;
+  }
+  return name;
+};
+
+const isSystemUserName = (name?: string): boolean =>
+  Boolean(name && name.trim().toLowerCase() === 'system');
+
+const getDisplayUserName = (name?: string): string | null => {
+  if (!name) return null;
+  return isSystemUserName(name) ? null : name.trim();
+};
+
 const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
   data,
   onClose,
@@ -96,6 +137,8 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
   const [copiedField, setCopiedField] = useState<string>('');
   const [isClearing, setIsClearing] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const [messageExpanded, setMessageExpanded] = useState(true);
+  const [exceptionExpanded, setExceptionExpanded] = useState(true);
 
   // Filter state (client-side, applied to currently loaded logs)
   const [dateFrom, setDateFrom] = useState('');
@@ -122,12 +165,12 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
           <div className="d365-dialog-header d365-trace-header">
             <h2>Plugin Trace Logs</h2>
             <button className="d365-dialog-close" onClick={onClose} title="Close">
-              ×
+              &times;
             </button>
           </div>
           <div className="d365-dialog-content">
             <div className="d365-dialog-error">
-              <div className="d365-dialog-error-icon">⚠️</div>
+              <div className="d365-dialog-error-icon">&nbsp;&#9888;&#65039;</div>
               <div className="d365-dialog-error-message">{data.error}</div>
               <div className="d365-dialog-error-hint">
                 Ensure plugin tracing is enabled (Organization Settings &gt; Administration &gt; System Settings) and that
@@ -204,6 +247,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
           log.requestId,
           log.exceptionDetails,
           log.messageBlock,
+          log.createdByName,
         ]
           .map(normalize)
           .filter(Boolean)
@@ -298,23 +342,58 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
     }
   };
 
+  const getDurationClass = (ms?: number): string => {
+    if (ms === undefined || ms === null || !Number.isFinite(ms)) return '';
+    if (ms >= 2000) return 'd365-trace-list-item-duration--slow';
+    if (ms >= 500) return 'd365-trace-list-item-duration--medium';
+    return '';
+  };
+
   const renderLogListItem = (log: PluginTraceLogRecord) => {
     const isSelected = selectedLog?.id === log.id;
+    const modeShort = formatModeShort(log.mode);
+    const durationShort = formatDurationShort(log.performanceDurationMs);
+    const createdByDisplay = getDisplayUserName(log.createdByName);
 
     return (
       <div
         key={log.id}
-        className={`d365-trace-list-item ${isSelected ? 'd365-trace-list-item-selected' : ''}`}
+        className={`d365-trace-list-item ${isSelected ? 'd365-trace-list-item-selected' : ''} ${hasException(log) ? 'd365-trace-list-item--error' : ''}`}
         onClick={() => setSelectedLog(log)}
       >
         <div className="d365-trace-list-item-top">
-          {hasException(log) && <span className="d365-trace-list-item-error">⚠</span>}
+          {hasException(log) && <span className="d365-trace-list-item-error">&nbsp;&#9888;</span>}
           <div className="d365-trace-list-item-message">{log.messageName || 'Unknown Message'}</div>
+          <div className="d365-trace-list-item-badges">
+            {modeShort && (
+              <span className={`d365-trace-list-item-mode d365-trace-list-item-mode--${modeShort.toLowerCase()}`}>
+                {modeShort}
+              </span>
+            )}
+            {durationShort && (
+              <span className={`d365-trace-list-item-duration ${getDurationClass(log.performanceDurationMs)}`}>
+                {durationShort}
+              </span>
+            )}
+          </div>
         </div>
-        {log.primaryEntity && (
-          <div className="d365-trace-list-item-entity">{log.primaryEntity}</div>
+        {log.typeName && (
+          <div className="d365-trace-list-item-plugin" title={log.typeName}>
+            {truncatePluginName(log.typeName)}
+          </div>
         )}
-        <div className="d365-trace-list-item-time">{formatDateTime(log.createdOn)}</div>
+        <div className="d365-trace-list-item-bottom">
+          {log.primaryEntity && (
+            <span className="d365-trace-list-item-entity">{log.primaryEntity}</span>
+          )}
+          <span className="d365-trace-list-item-time">{formatDateTime(log.createdOn)}</span>
+        </div>
+        {createdByDisplay && (
+          <div className="d365-trace-list-item-user">
+            <span className="d365-trace-list-item-user-icon">&nbsp;&#128100;</span>
+            {createdByDisplay}
+          </div>
+        )}
       </div>
     );
   };
@@ -325,6 +404,21 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
         <div className="d365-trace-details-empty">
           Select a trace log to view details
         </div>
+      );
+    }
+
+    const createdByDisplay = getDisplayUserName(selectedLog.createdByName);
+
+    const metaItems: React.ReactNode[] = [
+      <span key="mode">{formatMode(selectedLog.mode)}</span>,
+      <span key="duration">{formatDuration(selectedLog.performanceDurationMs)}</span>,
+    ];
+
+    if (createdByDisplay) {
+      metaItems.push(
+        <span key="user" className="d365-trace-details-meta-user">
+          &nbsp;&#128100; {createdByDisplay}
+        </span>
       );
     }
 
@@ -339,9 +433,12 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
             {hasException(selectedLog) && <span className="d365-trace-error-badge">Exception</span>}
           </div>
           <div className="d365-trace-details-meta">
-            <span>{formatMode(selectedLog.mode)}</span>
-            <span>•</span>
-            <span>{formatDuration(selectedLog.performanceDurationMs)}</span>
+            {metaItems.map((item, index) => (
+              <React.Fragment key={index}>
+                {index > 0 && <span>&bull;</span>}
+                {item}
+              </React.Fragment>
+            ))}
           </div>
         </div>
 
@@ -349,7 +446,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
           <div className="d365-trace-detail-grid">
             <div className="d365-trace-detail">
               <span className="d365-trace-detail-label">Plugin Type</span>
-              <span className="d365-trace-detail-value">{selectedLog.typeName || '—'}</span>
+              <span className="d365-trace-detail-value">{selectedLog.typeName || '\u2014'}</span>
             </div>
             <div className="d365-trace-detail">
               <span className="d365-trace-detail-label">Created On</span>
@@ -363,12 +460,20 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
             </div>
             <div className="d365-trace-detail">
               <span className="d365-trace-detail-label">Depth</span>
-              <span className="d365-trace-detail-value">{selectedLog.depth ?? '—'}</span>
+              <span className="d365-trace-detail-value">{selectedLog.depth ?? '\u2014'}</span>
             </div>
+            {createdByDisplay && (
+              <div className="d365-trace-detail">
+                <span className="d365-trace-detail-label">Created By</span>
+                <span className="d365-trace-detail-value">
+                  <span className="d365-trace-details-meta-user">&nbsp;&#128100; {createdByDisplay}</span>
+                </span>
+              </div>
+            )}
             <div className="d365-trace-detail">
               <span className="d365-trace-detail-label">Correlation ID</span>
               <div className="d365-trace-detail-value">
-                {selectedLog.operationCorrelationId || '—'}
+                {selectedLog.operationCorrelationId || '\u2014'}
                 {selectedLog.operationCorrelationId && (
                   <button
                     className="d365-trace-copy-btn"
@@ -376,7 +481,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
                     title="Copy correlation ID"
                   >
                     {copiedField === `correlation-${selectedLog.id}` ? (
-                      <span className="d365-copy-success">✓</span>
+                      <span className="d365-copy-success">&checkmark;</span>
                     ) : (
                       <img
                         src={chrome.runtime.getURL('icons/rg_copy.svg')}
@@ -391,7 +496,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
             <div className="d365-trace-detail">
               <span className="d365-trace-detail-label">Request ID</span>
               <div className="d365-trace-detail-value">
-                {selectedLog.requestId || '—'}
+                {selectedLog.requestId || '\u2014'}
                 {selectedLog.requestId && (
                   <button
                     className="d365-trace-copy-btn"
@@ -399,7 +504,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
                     title="Copy request ID"
                   >
                     {copiedField === `request-${selectedLog.id}` ? (
-                      <span className="d365-copy-success">✓</span>
+                      <span className="d365-copy-success">&checkmark;</span>
                     ) : (
                       <img
                         src={chrome.runtime.getURL('icons/rg_copy.svg')}
@@ -417,53 +522,75 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
             <div className="d365-trace-section">
               <div className="d365-trace-section-header">
                 <div className="d365-trace-section-title">Message Log</div>
-                <button
-                  className="d365-trace-copy-btn"
-                  onClick={() => handleCopy(selectedLog.messageBlock, `message-${selectedLog.id}`)}
-                  title="Copy message log"
-                >
-                  {copiedField === `message-${selectedLog.id}` ? (
-                    <span className="d365-copy-success">✓ Copied</span>
-                  ) : (
-                    <>
-                      <img
-                        src={chrome.runtime.getURL('icons/rg_copy.svg')}
-                        alt="Copy"
-                        className="d365-copy-icon"
-                      />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
+                <div className="d365-trace-section-actions">
+                  <button
+                    className="d365-trace-section-toggle"
+                    onClick={() => setMessageExpanded(prev => !prev)}
+                    title={messageExpanded ? 'Collapse' : 'Expand'}
+                  >
+                    {messageExpanded ? 'Collapse' : 'Expand'}
+                  </button>
+                  <button
+                    className="d365-trace-copy-btn"
+                    onClick={() => handleCopy(selectedLog.messageBlock, `message-${selectedLog.id}`)}
+                    title="Copy message log"
+                  >
+                    {copiedField === `message-${selectedLog.id}` ? (
+                      <span className="d365-copy-success">&checkmark; Copied</span>
+                    ) : (
+                      <>
+                        <img
+                          src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                          alt="Copy"
+                          className="d365-copy-icon"
+                        />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <pre className="d365-trace-pre">{selectedLog.messageBlock}</pre>
+              <pre className={`d365-trace-pre ${messageExpanded ? 'd365-trace-pre--expanded' : 'd365-trace-pre--collapsed'}`}>
+                {selectedLog.messageBlock}
+              </pre>
             </div>
           )}
 
           {selectedLog.exceptionDetails && (
-            <div className="d365-trace-section">
+            <div className="d365-trace-section d365-trace-section--error">
               <div className="d365-trace-section-header">
-                <div className="d365-trace-section-title">Exception Details</div>
-                <button
-                  className="d365-trace-copy-btn"
-                  onClick={() => handleCopy(selectedLog.exceptionDetails, `exception-${selectedLog.id}`)}
-                  title="Copy exception details"
-                >
-                  {copiedField === `exception-${selectedLog.id}` ? (
-                    <span className="d365-copy-success">✓ Copied</span>
-                  ) : (
-                    <>
-                      <img
-                        src={chrome.runtime.getURL('icons/rg_copy.svg')}
-                        alt="Copy"
-                        className="d365-copy-icon"
-                      />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
+                <div className="d365-trace-section-title d365-trace-section-title--error">Exception Details</div>
+                <div className="d365-trace-section-actions">
+                  <button
+                    className="d365-trace-section-toggle"
+                    onClick={() => setExceptionExpanded(prev => !prev)}
+                    title={exceptionExpanded ? 'Collapse' : 'Expand'}
+                  >
+                    {exceptionExpanded ? 'Collapse' : 'Expand'}
+                  </button>
+                  <button
+                    className="d365-trace-copy-btn"
+                    onClick={() => handleCopy(selectedLog.exceptionDetails, `exception-${selectedLog.id}`)}
+                    title="Copy exception details"
+                  >
+                    {copiedField === `exception-${selectedLog.id}` ? (
+                      <span className="d365-copy-success">&checkmark; Copied</span>
+                    ) : (
+                      <>
+                        <img
+                          src={chrome.runtime.getURL('icons/rg_copy.svg')}
+                          alt="Copy"
+                          className="d365-copy-icon"
+                        />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <pre className="d365-trace-pre d365-trace-pre-error">{selectedLog.exceptionDetails}</pre>
+              <pre className={`d365-trace-pre d365-trace-pre-error ${exceptionExpanded ? 'd365-trace-pre--expanded' : 'd365-trace-pre--collapsed'}`}>
+                {selectedLog.exceptionDetails}
+              </pre>
             </div>
           )}
         </div>
@@ -485,7 +612,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
               title="Clear the currently displayed logs (does not delete records)"
               disabled={isClearing || data.logs.length === 0}
             >
-              🧹
+              &#x1f9f9;
             </button>
             <button
               className="d365-trace-refresh"
@@ -496,7 +623,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
               ↻
             </button>
             <button className="d365-dialog-close" onClick={onClose} title="Close">
-              ×
+              &times;
             </button>
           </div>
         </div>
@@ -508,7 +635,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
             type="button"
             title={showFilters ? 'Hide filters' : 'Show filters'}
           >
-            Filter {showFilters ? '▲' : '▼'}
+            Filter {showFilters ? '\u25B2' : '\u25BC'}
           </button>
           <div className="d365-trace-filter-summary">
             Showing <strong>{filteredLogs.length}</strong> of <strong>{data.logs.length}</strong>
@@ -654,7 +781,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
                     value={durationMin}
                     onChange={(e) => setDurationMin(e.target.value)}
                   />
-                  <span>–</span>
+                  <span>&ndash;</span>
                   <input
                     type="number"
                     min="0"
@@ -680,7 +807,7 @@ const PluginTraceLogViewer: React.FC<PluginTraceLogViewerProps> = ({
               </div>
             </div>
             <div className="d365-trace-filter-note">
-              Filters apply to the currently loaded logs. Adjust “Plugin trace log default limit” in extension settings to fetch more.
+              Filters apply to the currently loaded logs. Adjust &ldquo;Plugin trace log default limit&rdquo; in extension settings to fetch more.
             </div>
           </div>
         )}

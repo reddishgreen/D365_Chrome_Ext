@@ -1823,7 +1823,9 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
               log.PerformanceExecutionStartTime,
             requestId: log.requestid || log.RequestId,
             exceptionDetails: log.exceptiondetails || log.ExceptionDetails,
-            messageBlock: log.messageblock || log.messagelog || log.MessageBlock || log.MessageLog
+            messageBlock: log.messageblock || log.messagelog || log.MessageBlock || log.MessageLog,
+            createdByName: log['_createdby_value@OData.Community.Display.V1.FormattedValue'] || '',
+            createdById: log._createdby_value || log['_createdby_value'] || ''
           }));
 
           result = {
