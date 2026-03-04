@@ -151,6 +151,16 @@ export class D365Helper {
       throw new Error('Could not determine current record context');
     }
 
+    const extractGuid = (raw: string): string | null => {
+      if (!raw) return null;
+      const match = raw.match(/[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}/);
+      if (!match) return null;
+      const clean = match[0].replace(/[{}]/g, '').toLowerCase();
+      // Ensure hyphenated format
+      if (clean.length !== 32) return match[0].replace(/[{}]/g, '');
+      return `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20)}`;
+    };
+
     const orgUrl = this.getOrgUrl();
     const entitySetName = this.getEntitySetName(entityName);
     const apiUrl = `${orgUrl}/api/data/v9.2/${entitySetName}(${recordId})`;
@@ -158,7 +168,17 @@ export class D365Helper {
     // Build the PATCH payload
     const payload: Record<string, any> = {};
     for (const change of changes) {
-      let value: any = change.oldValue;
+      const rawValue = change.oldValue;
+
+      // If the audit record contains a GUID-looking value, treat as a lookup and use @odata.bind
+      const guid = extractGuid(rawValue);
+      if (guid) {
+        const bindName = `${change.fieldName}@odata.bind`;
+        payload[bindName] = `/${this.getEntitySetName(change.fieldName)}(${guid})`;
+        continue;
+      }
+
+      let value: any = rawValue;
 
       // Try to coerce back to original type
       if (value === '' || value === null || value === undefined) {
