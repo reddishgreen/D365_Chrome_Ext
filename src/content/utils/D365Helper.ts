@@ -980,7 +980,9 @@ export class D365Helper {
   // Get audit history for current record
   async getAuditHistory(): Promise<any> {
     try {
-      return await this.sendRequest('GET_AUDIT_HISTORY');
+      // Audit history can be slow in some environments; allow longer timeout.
+      // This is a hard timeout, not a wait—if it returns sooner, we resolve immediately.
+      return await this.sendRequest('GET_AUDIT_HISTORY', undefined, { timeoutMs: 120000 });
     } catch (error) {
       console.error('Error getting audit history:', error);
       throw error;
