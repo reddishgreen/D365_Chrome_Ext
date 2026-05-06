@@ -1,0 +1,291 @@
+.ap-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  /* backdrop-filter removed - was causing brightness flash on some GPUs */
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.ap-container {
+  background: #f4f6f9;
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
+  width: 95%;
+  max-width: 1100px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  background: linear-gradient(135deg, #0C274C 0%, #1a3d6b 100%);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ap-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ap-subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.ap-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ap-loading-pill {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.ap-icon-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ap-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.ap-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ap-icon-btn svg {
+  display: block;
+}
+
+.ap-filters {
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #fff;
+  border-bottom: 1px solid #e1e4e8;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ap-search {
+  flex: 1 1 280px;
+  min-width: 220px;
+  padding: 7px 12px;
+  border: 1px solid #c8ccd1;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.ap-filter {
+  padding: 7px 10px;
+  border: 1px solid #c8ccd1;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.ap-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #5c6c7c;
+}
+
+.ap-error {
+  padding: 18px 24px;
+  background: #fde7e9;
+  color: #a4262c;
+  font-size: 13px;
+}
+
+.ap-empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: #5c6c7c;
+  font-size: 13px;
+}
+
+.ap-content {
+  overflow-y: auto;
+  padding: 12px 16px;
+  flex: 1;
+}
+
+.ap-group {
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid #e1e4e8;
+}
+
+.ap-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-left: 4px solid #0078d4;
+  background: #fafbfc;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.ap-group-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.ap-group-count {
+  font-size: 11px;
+  background: #eef2f7;
+  color: #5c6c7c;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.ap-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ap-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0f2f5;
+  align-items: flex-start;
+}
+
+.ap-row:last-child {
+  border-bottom: none;
+}
+
+.ap-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ap-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a2433;
+  word-break: break-word;
+}
+
+.ap-row-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  align-items: center;
+}
+
+.ap-row-desc {
+  font-size: 12px;
+  color: #5c6c7c;
+  margin-top: 6px;
+  white-space: pre-wrap;
+}
+
+.ap-pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.ap-pill-on {
+  background: #def4e0;
+  color: #0d6e15;
+  border-color: #b9e7bd;
+}
+
+.ap-pill-off {
+  background: #f0f2f5;
+  color: #6b7785;
+  border-color: #d8dde3;
+}
+
+.ap-pill-mode {
+  background: #eaf3fa;
+  color: #0c5e9e;
+  border-color: #c8e0f3;
+}
+
+.ap-pill-trigger {
+  background: #fff5e0;
+  color: #92591a;
+  border-color: #f0d9a3;
+}
+
+.ap-meta-text {
+  font-size: 11px;
+  color: #5c6c7c;
+}
+
+.ap-row-actions {
+  flex-shrink: 0;
+}
+
+.ap-toggle-btn {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  min-width: 92px;
+}
+
+.ap-toggle-activate {
+  background: #0d6e15;
+  color: #fff;
+}
+
+.ap-toggle-activate:hover:not(:disabled) {
+  background: #0a5e12;
+}
+
+.ap-toggle-deactivate {
+  background: #fff;
+  color: #a4262c;
+  border-color: #e6b3b5;
+}
+
+.ap-toggle-deactivate:hover:not(:disabled) {
+  background: #fde7e9;
+}
+
+.ap-toggle-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

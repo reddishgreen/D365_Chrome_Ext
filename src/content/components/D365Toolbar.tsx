@@ -5,12 +5,17 @@ import FormLibrariesAnalyzer from './FormLibrariesAnalyzer';
 import PluginTraceLogViewer, { PluginTraceLogData } from './PluginTraceLogViewer';
 import OptionSetsViewer, { OptionSetsData } from './OptionSetsViewer';
 import ODataFieldsViewer, { ODataFieldsData } from './ODataFieldsViewer';
-import AuditHistoryViewer, { AuditHistoryData } from './AuditHistoryViewer';
+import AuditHistoryViewer, { AuditHistoryData, AuditRecord } from './AuditHistoryViewer';
 import QueryBuilder from '../../query-builder/components/QueryBuilder';
 import ImpersonationSelector, { ImpersonationData, SystemUser } from './ImpersonationSelector';
 import RecordNavigator from './RecordNavigator';
 import { EntityInfo } from '../utils/D365Helper';
 import PromptMakerViewer from './PromptMakerViewer';
+import ActiveProcessesViewer, { ActiveProcessesData, ProcessRecord } from './ActiveProcessesViewer';
+import PluginStepsViewer, { PluginStepsData, PluginStepRecord, PluginStepImage } from './PluginStepsViewer';
+import PrivilegeDebugger, { PrivilegeDebugData } from './PrivilegeDebugger';
+import CommandPalette, { PaletteCommand, CustomCommand, normaliseChord } from './CommandPalette';
+import CloseIcon from './CloseIcon';
 
 // Toolbar configuration types
 type SectionId = 'fields' | 'sections' | 'schema' | 'navigation' | 'devtools' | 'tools';
@@ -51,8 +56,26 @@ const DEFAULT_SECTION_BUTTONS: Record<SectionId, string[]> = {
     'tools.auditHistory',
     'tools.formEditor',
     'tools.promptMaker',
-    'tools.navigateTo'
+    'tools.navigateTo',
+    'tools.commandPalette',
+    'tools.activeProcesses',
+    'tools.pluginSteps',
+    'tools.privilegeDebug'
   ]
+};
+
+// Out-of-the-box keyboard chords. Applied on first install only — once the user
+// edits any binding (or explicitly clears them) we don't re-add these.
+// Shift+letter is intentionally chosen so chords don't conflict with Chrome shortcuts
+// (which are mostly Ctrl-based) and don't fire while you're typing in form fields
+// (the global listener bails when focus is in an editable element).
+const DEFAULT_KEY_BINDINGS: Record<string, string> = {
+  'cmd.devmode': 'shift+d',
+  'cmd.auditHistory': 'shift+a',
+  'cmd.webApi': 'shift+w',
+  'cmd.odataFields': 'shift+o',
+  'cmd.optionSets': 'shift+s',
+  'cmd.impersonate': 'shift+i',
 };
 
 const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
@@ -80,7 +103,11 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
     'tools.auditHistory': true,
     'tools.formEditor': false,
     'tools.promptMaker': true,
-    'tools.navigateTo': true
+    'tools.navigateTo': true,
+    'tools.commandPalette': true,
+    'tools.activeProcesses': true,
+    'tools.pluginSteps': true,
+    'tools.privilegeDebug': true
   },
   sectionLabels: {
     devtools: 'Form Controls',
@@ -98,6 +125,7 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
       'tools.copyId'
     ],
     tools: [
+      'tools.commandPalette',
       'tools.webApi',
       'tools.traceLogs',
       'tools.queryBuilder',
@@ -106,6 +134,9 @@ const DEFAULT_TOOLBAR_CONFIG: ToolbarConfig = {
       'tools.jsLibraries',
       'tools.odataFields',
       'tools.auditHistory',
+      'tools.activeProcesses',
+      'tools.pluginSteps',
+      'tools.privilegeDebug',
       'tools.formEditor',
       'tools.navigateTo'
     ],
@@ -134,6 +165,8 @@ const D365Toolbar: React.FC = () => {
   const [odataFieldsData, setODataFieldsData] = useState<ODataFieldsData | null>(null);
   const [showAuditHistory, setShowAuditHistory] = useState(false);
   const [auditHistoryData, setAuditHistoryData] = useState<AuditHistoryData | null>(null);
+  const [auditHistoryLoading, setAuditHistoryLoading] = useState(false);
+  const [auditHistoryNeedsFormReload, setAuditHistoryNeedsFormReload] = useState(false);
   const [showQueryBuilder, setShowQueryBuilder] = useState(false);
   const [notificationDuration, setNotificationDuration] = useState(3);
   const [toolbarPosition, setToolbarPosition] = useState<'top' | 'bottom'>('bottom');
@@ -145,6 +178,27 @@ const D365Toolbar: React.FC = () => {
   const [showRecordNavigator, setShowRecordNavigator] = useState(false);
   const [navigatorEntities, setNavigatorEntities] = useState<EntityInfo[] | null>(null);
   const [navigatorError, setNavigatorError] = useState<string | undefined>(undefined);
+  const [showActiveProcesses, setShowActiveProcesses] = useState(false);
+  const [activeProcessesData, setActiveProcessesData] = useState<ActiveProcessesData | null>(null);
+  const [activeProcessesLoading, setActiveProcessesLoading] = useState(false);
+  const [showPluginSteps, setShowPluginSteps] = useState(false);
+  const [pluginStepsData, setPluginStepsData] = useState<PluginStepsData | null>(null);
+  const [pluginStepsLoading, setPluginStepsLoading] = useState(false);
+  const [showPrivilegeDebug, setShowPrivilegeDebug] = useState(false);
+  const [privilegeDebugData, setPrivilegeDebugData] = useState<PrivilegeDebugData | null>(null);
+  const [privilegeDebugLoading, setPrivilegeDebugLoading] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [paletteCompactMode, setPaletteCompactMode] = useState(false);
+  // `showTool` (popup setting) hides the bar entirely but the component keeps
+  // running so Ctrl+K and bound chords still work.
+  const [showTool, setShowTool] = useState(true);
+  const [pinnedCommandIds, setPinnedCommandIds] = useState<string[]>([]);
+  const [customCommands, setCustomCommands] = useState<CustomCommand[]>([]);
+  const [keyBindings, setKeyBindings] = useState<Record<string, string>>({});
+  // Refs the global hotkey listener reads from so we don't re-attach on every render.
+  const keyBindingsRef = useRef<Record<string, string>>({});
+  const paletteCommandsRef = useRef<PaletteCommand[]>([]);
+  const showCommandPaletteRef = useRef(false);
   const showSchemaNamesRef = useRef(showSchemaNames);
   const allFieldsVisibleRef = useRef(allFieldsVisible);
   const allSectionsVisibleRef = useRef(allSectionsVisible);
@@ -224,7 +278,10 @@ const D365Toolbar: React.FC = () => {
       return { sectionOrder, buttonVisibility, sectionLabels, sectionButtons: normalizedSectionButtons };
     };
 
-    chrome.storage.sync.get(['notificationDuration', 'toolbarPosition', 'traceLogLimit', 'toolbarConfig', 'devModeActive', 'devModePersist'], (result) => {
+    chrome.storage.sync.get(['showTool', 'notificationDuration', 'toolbarPosition', 'traceLogLimit', 'toolbarConfig', 'devModeActive', 'devModePersist', 'paletteSettings'], (result) => {
+      if (typeof result.showTool === 'boolean') {
+        setShowTool(result.showTool);
+      }
       if (result.notificationDuration !== undefined) {
         setNotificationDuration(result.notificationDuration);
       }
@@ -236,6 +293,46 @@ const D365Toolbar: React.FC = () => {
       }
       if (result.toolbarConfig !== undefined) {
         setToolbarConfig(normalizeToolbarConfig(result.toolbarConfig));
+      }
+      // Apply default key bindings on first install (when paletteSettings.keyBindings
+      // has never been written). After that we respect whatever the user has set —
+      // including an explicitly empty object meaning "no defaults, please".
+      const ps = (result.paletteSettings || {}) as any;
+      if (ps && typeof ps === 'object') {
+        if (typeof ps.compactMode === 'boolean') setPaletteCompactMode(ps.compactMode);
+        if (Array.isArray(ps.pinnedCommandIds)) {
+          setPinnedCommandIds(ps.pinnedCommandIds.filter((x: any) => typeof x === 'string'));
+        }
+        if (Array.isArray(ps.customCommands)) {
+          setCustomCommands(
+            ps.customCommands.filter(
+              (c: any) =>
+                c && typeof c.id === 'string' && typeof c.label === 'string' && typeof c.url === 'string'
+            )
+          );
+        }
+        const hasKeyBindingsField = Object.prototype.hasOwnProperty.call(ps, 'keyBindings');
+        if (hasKeyBindingsField && ps.keyBindings && typeof ps.keyBindings === 'object') {
+          const cleaned: Record<string, string> = {};
+          Object.entries(ps.keyBindings).forEach(([k, v]) => {
+            if (typeof k === 'string' && typeof v === 'string' && v) cleaned[k] = v;
+          });
+          setKeyBindings(cleaned);
+          keyBindingsRef.current = cleaned;
+        } else if (!hasKeyBindingsField) {
+          // First-run install — seed defaults and persist so we don't reseed if user clears them.
+          const seeded = { ...DEFAULT_KEY_BINDINGS };
+          setKeyBindings(seeded);
+          keyBindingsRef.current = seeded;
+          chrome.storage.sync.set({
+            paletteSettings: {
+              compactMode: typeof ps.compactMode === 'boolean' ? ps.compactMode : false,
+              pinnedCommandIds: Array.isArray(ps.pinnedCommandIds) ? ps.pinnedCommandIds : [],
+              customCommands: Array.isArray(ps.customCommands) ? ps.customCommands : [],
+              keyBindings: seeded,
+            },
+          });
+        }
       }
       // Load Dev Mode state from storage and apply if enabled
       // Only restore Dev Mode if persistence is on (default true)
@@ -251,6 +348,9 @@ const D365Toolbar: React.FC = () => {
 
     // Listen for setting changes
     const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.showTool && typeof changes.showTool.newValue === 'boolean') {
+        setShowTool(changes.showTool.newValue);
+      }
       if (changes.notificationDuration) {
         setNotificationDuration(changes.notificationDuration.newValue);
       }
@@ -262,6 +362,32 @@ const D365Toolbar: React.FC = () => {
       }
       if (changes.toolbarConfig) {
         setToolbarConfig(normalizeToolbarConfig(changes.toolbarConfig.newValue));
+      }
+      if (changes.paletteSettings) {
+        const ps = changes.paletteSettings.newValue || {};
+        if (typeof ps.compactMode === 'boolean') setPaletteCompactMode(ps.compactMode);
+        if (Array.isArray(ps.pinnedCommandIds)) {
+          setPinnedCommandIds(ps.pinnedCommandIds.filter((x: any) => typeof x === 'string'));
+        }
+        if (Array.isArray(ps.customCommands)) {
+          setCustomCommands(
+            ps.customCommands.filter(
+              (c: any) =>
+                c && typeof c.id === 'string' && typeof c.label === 'string' && typeof c.url === 'string'
+            )
+          );
+        }
+        if (ps.keyBindings && typeof ps.keyBindings === 'object') {
+          const cleaned: Record<string, string> = {};
+          Object.entries(ps.keyBindings).forEach(([k, v]) => {
+            if (typeof k === 'string' && typeof v === 'string' && v) cleaned[k] = v;
+          });
+          setKeyBindings(cleaned);
+          keyBindingsRef.current = cleaned;
+        } else if (ps && Object.prototype.hasOwnProperty.call(ps, 'keyBindings')) {
+          setKeyBindings({});
+          keyBindingsRef.current = {};
+        }
       }
       if (changes.devModeActive !== undefined) {
         const newDevModeState = changes.devModeActive.newValue === true;
@@ -292,11 +418,20 @@ const D365Toolbar: React.FC = () => {
     [toolbarConfig.sectionLabels]
   );
 
+  // Bar is hidden whenever the user has chosen compact mode OR has turned the toolbar
+  // off via the popup. Either way the keyboard listeners remain mounted.
+  const isBarHidden = paletteCompactMode || !showTool;
+
   const updateShellOffset = useCallback(() => {
+    if (isBarHidden) {
+      // Bar isn't visible; reclaim the space D365's shell was leaving for it.
+      restoreShellContainerLayout();
+      return;
+    }
     const toolbarHeight = toolbarRef.current?.getBoundingClientRect().height;
     const fallbackHeight = 70;
     setShellContainerOffset(Math.round(toolbarHeight ?? fallbackHeight), toolbarPosition);
-  }, [toolbarPosition]);
+  }, [toolbarPosition, isBarHidden]);
 
   useEffect(() => {
     updateShellOffset();
@@ -338,6 +473,87 @@ const D365Toolbar: React.FC = () => {
     devModeActiveRef.current = devModeActive;
   }, [devModeActive]);
 
+  // Ctrl+K / Cmd+K opens the command palette; user-bound chords run their commands.
+  // Reads from refs so we don't have to re-attach the listener on every render.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const modifier = isMac ? e.metaKey : e.ctrlKey;
+      if (modifier && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowCommandPalette((s) => !s);
+        return;
+      }
+
+      // Don't fire user-bound chords while the palette itself is open
+      // (palette has its own keyboard handling, including chord-capture mode).
+      if (showCommandPaletteRef.current) return;
+
+      // Skip when the user is typing in an editable element so we don't steal
+      // chords from text inputs / D365 form fields.
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        const isEditable =
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          (target as any).isContentEditable === true;
+        if (isEditable) return;
+      }
+
+      const chord = normaliseChord(e);
+      if (!chord) return;
+
+      const bindings = keyBindingsRef.current;
+      const matchEntry = Object.entries(bindings).find(([, c]) => c === chord);
+      if (!matchEntry) return;
+      const [cmdId] = matchEntry;
+      const cmd = paletteCommandsRef.current.find((c) => c.id === cmdId);
+      if (!cmd) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        cmd.run();
+      } catch (err) {
+        console.error('[D365 Helper] Bound command failed:', err);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
+  // Keep refs in sync so the keydown listener (which has [] deps) sees fresh values.
+  useEffect(() => {
+    showCommandPaletteRef.current = showCommandPalette;
+  }, [showCommandPalette]);
+
+  useEffect(() => {
+    keyBindingsRef.current = keyBindings;
+  }, [keyBindings]);
+
+  // Listen for refresh requests from pop-out trace viewer window
+  useEffect(() => {
+    const listener = (message: any, _sender: any, sendResponse: (response?: any) => void) => {
+      if (message.type === 'TRACE_LOG_REFRESH_REQUEST') {
+        helper.getPluginTraceLogs(traceLogLimit).then((data) => {
+          // Push updated data to the pop-out window via storage + broadcast
+          chrome.storage.local.set({ d365_trace_log_popout_data: data }, () => {
+            chrome.runtime.sendMessage({ type: 'TRACE_LOG_DATA_UPDATE', data });
+          });
+          sendResponse({ success: true });
+        }).catch(() => {
+          sendResponse({ success: false });
+        });
+        return true; // async response
+      }
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [traceLogLimit]);
+
   // Wait for form to be ready and apply Dev Mode if it was previously enabled
   useEffect(() => {
     let checkInterval: number | undefined;
@@ -352,12 +568,10 @@ const D365Toolbar: React.FC = () => {
           await helper.getRecordId();
           // Form is ready, now check storage
           const result = await chrome.storage.sync.get(['devModeActive']);
-          console.log('[D365 Helper] Dev Mode storage check:', result.devModeActive);
-          
+
           if (result.devModeActive === true) {
             // Apply if storage says it should be active (user had it on when navigating between forms)
             if (!hasApplied && applyDevModeRef.current) {
-              console.log('[D365 Helper] Reapplying Dev Mode from storage...');
               hasApplied = true;
               setDevModeActive(true);
               devModeActiveRef.current = true;
@@ -372,11 +586,9 @@ const D365Toolbar: React.FC = () => {
                   await helper.toggleSchemaOverlay(true);
                   setShowSchemaNames(true);
                   showSchemaNamesRef.current = true;
-                  console.log('[D365 Helper] Schema overlay reapplied after initial load');
                 } catch (error) {
                   console.warn('[D365 Helper] Failed to reapply schema overlay', error);
                 }
-                console.log('[D365 Helper] Dev Mode applied successfully');
               } catch (error) {
                 console.error('[D365 Helper] Failed to apply Dev Mode:', error);
                 hasApplied = false; // Allow retry
@@ -390,7 +602,6 @@ const D365Toolbar: React.FC = () => {
           } else {
             // Dev Mode is off in storage, make sure state matches
             if (devModeActive || devModeActiveRef.current) {
-              console.log('[D365 Helper] Dev Mode is off in storage, resetting state');
               setDevModeActive(false);
               devModeActiveRef.current = false;
             }
@@ -466,15 +677,12 @@ const D365Toolbar: React.FC = () => {
     };
 
     const reapplyDevModeAfterNavigation = async () => {
-      console.log('[D365 Helper] Reapplying Dev Mode after navigation...');
       // Check storage to see if Dev Mode should be active
       chrome.storage.sync.get(['devModeActive'], async (result) => {
         const shouldBeActive = result.devModeActive === true;
-        console.log('[D365 Helper] Reapply check - Dev Mode should be active:', shouldBeActive);
-        
+
         if (!shouldBeActive) {
           // Dev Mode is off in storage, make sure UI matches
-          console.log('[D365 Helper] Dev Mode is off, resetting state');
           if (devModeActiveRef.current) {
             devModeActiveRef.current = false;
             setDevModeActive(false);
@@ -484,7 +692,6 @@ const D365Toolbar: React.FC = () => {
         
         // Dev Mode should be active, reapply it
         if (devModeReapplyInProgress) {
-          console.log('[D365 Helper] Reapply already in progress, skipping');
           return;
         }
         devModeReapplyInProgress = true;
@@ -494,12 +701,10 @@ const D365Toolbar: React.FC = () => {
         let readyAttempts = 0;
         const maxReadyAttempts = 30;
 
-        console.log('[D365 Helper] Waiting for form to be ready...');
         while (!formReady && readyAttempts < maxReadyAttempts) {
           try {
             await helper.getRecordId();
             formReady = true;
-            console.log('[D365 Helper] Form is ready after', readyAttempts, 'attempts');
           } catch (error) {
             readyAttempts++;
             await new Promise(resolve => setTimeout(resolve, 300));
@@ -519,7 +724,6 @@ const D365Toolbar: React.FC = () => {
         // Form is ready, apply Dev Mode
         if (applyDevModeRef.current) {
           try {
-            console.log('[D365 Helper] Applying Dev Mode after navigation...');
             await applyDevModeRef.current(false);
             // Wait a bit and reapply schema overlay in case D365 reset it
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -527,11 +731,9 @@ const D365Toolbar: React.FC = () => {
               await helper.toggleSchemaOverlay(true);
               setShowSchemaNames(true);
               showSchemaNamesRef.current = true;
-              console.log('[D365 Helper] Schema overlay reapplied after delay');
             } catch (error) {
               console.warn('[D365 Helper] Failed to reapply schema overlay', error);
             }
-            console.log('[D365 Helper] Dev Mode reapplied successfully');
             devModeReapplyAttempts = 0;
             devModeReapplyInProgress = false;
           } catch (error) {
@@ -540,7 +742,6 @@ const D365Toolbar: React.FC = () => {
             if (devModeReapplyAttempts <= MAX_DEV_MODE_REAPPLY_ATTEMPTS) {
               // Form may still be loading; retry with a small backoff.
               const backoff = 600 + devModeReapplyAttempts * 500;
-              console.log('[D365 Helper] Retrying Dev Mode reapply in', backoff, 'ms');
               scheduleDevModeReapply(backoff);
               devModeReapplyInProgress = false;
             } else {
@@ -611,15 +812,12 @@ const D365Toolbar: React.FC = () => {
       const currentUrl = window.location.href;
       if (currentUrl !== lastUrl) {
         lastUrl = currentUrl;
-        console.log('[D365 Helper] Navigation detected to:', currentUrl);
-        
+
         // Check if we're still on a form page
         const isFormPage = isCurrentPageAForm();
-        console.log('[D365 Helper] Is current page a form?', isFormPage);
         
         if (!isFormPage) {
           // Navigated to a non-form page (grid, dashboard, etc.) - deactivate Dev Mode
-          console.log('[D365 Helper] Navigated to non-form page, deactivating Dev Mode');
           if (devModeActiveRef.current && removeDevModeRef.current) {
             removeDevModeRef.current(false).catch((error) => {
               console.error('[D365 Helper] Failed to deactivate Dev Mode:', error);
@@ -637,12 +835,10 @@ const D365Toolbar: React.FC = () => {
             const persistEnabled = result.devModePersist !== false; // default true for backwards compat
             if (shouldBeActive && persistEnabled) {
               // Keep Dev Mode on, but re-apply it for the newly loaded form.
-              console.log('[D365 Helper] Staying on form page, reapplying Dev Mode');
               scheduleDevModeReapply(1500);
             } else {
               // Persistence is off or Dev Mode is inactive - deactivate
               if (shouldBeActive && !persistEnabled && devModeActiveRef.current && removeDevModeRef.current) {
-                console.log('[D365 Helper] Dev Mode persist is off, deactivating on navigation');
                 removeDevModeRef.current(true).catch((error) => {
                   console.error('[D365 Helper] Failed to deactivate Dev Mode:', error);
                 });
@@ -708,40 +904,49 @@ const D365Toolbar: React.FC = () => {
     setTimeout(() => setNotification(''), notificationDuration * 1000);
   };
 
+  // Toggle handlers read state via refs so they always see the freshest value,
+  // even when invoked through a stale closure (e.g. a pinned button or palette command
+  // whose handler was captured during an earlier render).
   const handleToggleFields = async () => {
-    const newState = !allFieldsVisible;
+    const newState = !allFieldsVisibleRef.current;
     setAllFieldsVisible(newState);
+    allFieldsVisibleRef.current = newState;
     try {
       await helper.toggleAllFields(newState);
       showNotification(newState ? 'All fields shown' : 'Fields restored to original state');
     } catch (error: any) {
       setAllFieldsVisible(!newState); // Revert state on error
+      allFieldsVisibleRef.current = !newState;
       const message = error?.message || 'Error toggling fields';
       showNotification(message);
     }
   };
 
   const handleToggleSections = async () => {
-    const newState = !allSectionsVisible;
+    const newState = !allSectionsVisibleRef.current;
     setAllSectionsVisible(newState);
+    allSectionsVisibleRef.current = newState;
     try {
       await helper.toggleAllSections(newState);
       showNotification(newState ? 'All sections shown' : 'Sections restored to original state');
     } catch (error: any) {
       setAllSectionsVisible(!newState); // Revert state on error
+      allSectionsVisibleRef.current = !newState;
       const message = error?.message || 'Error toggling sections';
       showNotification(message);
     }
   };
 
   const handleToggleBlurFields = async () => {
-    const newState = !fieldsBlurred;
+    const newState = !fieldsBlurredRef.current;
     setFieldsBlurred(newState);
+    fieldsBlurredRef.current = newState;
     try {
       await helper.toggleBlurFields(newState);
       showNotification(newState ? 'Fields blurred for privacy' : 'Field blur removed');
     } catch (error: any) {
       setFieldsBlurred(!newState); // Revert state on error
+      fieldsBlurredRef.current = !newState;
       const message = error?.message || 'Error toggling field blur';
       showNotification(message);
     }
@@ -762,8 +967,9 @@ const D365Toolbar: React.FC = () => {
   };
 
   const handleToggleSchemaNames = async () => {
-    const newState = !showSchemaNames;
+    const newState = !showSchemaNamesRef.current;
     setShowSchemaNames(newState);
+    showSchemaNamesRef.current = newState;
     try {
       await helper.toggleSchemaOverlay(newState);
       showNotification(newState ? 'Schema names shown' : 'Schema names hidden');
@@ -882,6 +1088,21 @@ const D365Toolbar: React.FC = () => {
     setTraceLogData(null);
   };
 
+  const handlePopoutTraceLogs = () => {
+    if (!traceLogData) return;
+    // Store data and source tab for the pop-out window
+    chrome.storage.local.set({
+      d365_trace_log_popout_data: traceLogData,
+      d365_trace_log_source_tab: null, // Will be set by background if needed
+    }, () => {
+      const url = chrome.runtime.getURL('trace-viewer.html');
+      window.open(url, 'trace-viewer-window', 'width=1400,height=800');
+      // Close the inline modal
+      setShowTraceLogs(false);
+      setTraceLogData(null);
+    });
+  };
+
   const handleOpenPromptMaker = () => {
     setShowPromptMaker(true);
     showNotification('Opening AI Prompt Maker...');
@@ -959,43 +1180,55 @@ const D365Toolbar: React.FC = () => {
     setODataFieldsData(null);
   };
 
-  const loadAuditHistory = async (showLoading: boolean) => {
+  const loadAuditHistory = async () => {
+    setAuditHistoryLoading(true);
     try {
-      if (showLoading) {
-        showNotification('Loading audit history...');
-      }
       const data = await helper.getAuditHistory();
       setAuditHistoryData(data);
-      setShowAuditHistory(true);
-      if (showLoading) {
-        showNotification('Audit history loaded');
-      }
     } catch (error: any) {
       const message = error?.message || 'Error loading audit history';
       showNotification(message);
       setAuditHistoryData({ records: [], error: message });
-      setShowAuditHistory(true);
+    } finally {
+      setAuditHistoryLoading(false);
     }
   };
 
   const handleShowAuditHistory = async () => {
-    await loadAuditHistory(true);
+    setAuditHistoryNeedsFormReload(false);
+    setShowAuditHistory(true);
+    if (!auditHistoryData) {
+      setAuditHistoryData({ records: [] });
+    }
+    await loadAuditHistory();
   };
 
   const handleRefreshAuditHistory = async () => {
-    await loadAuditHistory(false);
+    await loadAuditHistory();
   };
 
   const handleCloseAuditHistory = () => {
+    const shouldReloadForm = auditHistoryNeedsFormReload;
     setShowAuditHistory(false);
+    setAuditHistoryLoading(false);
     setAuditHistoryData(null);
+    setAuditHistoryNeedsFormReload(false);
+
+    if (shouldReloadForm) {
+      showNotification('Refreshing form to reflect rollback changes...');
+      setTimeout(() => location.reload(), 150);
+    }
   };
 
-  const handleAuditRollback = async (fieldName: string, oldValue: string, skipPlugins?: boolean): Promise<boolean> => {
+  const handleAuditRollback = async (record: AuditRecord, skipPlugins?: boolean): Promise<boolean> => {
     try {
-      await helper.rollbackFields([{ fieldName, oldValue }], skipPlugins);
-      showNotification(`Rolled back ${fieldName}`);
-      await loadAuditHistory(false);
+      await helper.rollbackFields(
+        [{ fieldName: record.fieldName, oldValue: record.rollbackOldValue ?? record.oldValue }],
+        skipPlugins
+      );
+      setAuditHistoryNeedsFormReload(true);
+      showNotification(`Rolled back ${record.fieldName}. Refreshing audit history...`);
+      loadAuditHistory().catch(() => undefined);
       return true;
     } catch (error: any) {
       const message = error?.message || 'Rollback failed';
@@ -1004,11 +1237,18 @@ const D365Toolbar: React.FC = () => {
     }
   };
 
-  const handleAuditRollbackGroup = async (changes: { fieldName: string; oldValue: string }[], skipPlugins?: boolean): Promise<boolean> => {
+  const handleAuditRollbackGroup = async (records: AuditRecord[], skipPlugins?: boolean): Promise<boolean> => {
     try {
-      await helper.rollbackFields(changes, skipPlugins);
-      showNotification(`Rolled back ${changes.length} field${changes.length !== 1 ? 's' : ''}`);
-      await loadAuditHistory(false);
+      await helper.rollbackFields(
+        records.map((record) => ({
+          fieldName: record.fieldName,
+          oldValue: record.rollbackOldValue ?? record.oldValue,
+        })),
+        skipPlugins
+      );
+      setAuditHistoryNeedsFormReload(true);
+      showNotification(`Rolled back ${records.length} field${records.length !== 1 ? 's' : ''}. Refreshing audit history...`);
+      loadAuditHistory().catch(() => undefined);
       return true;
     } catch (error: any) {
       const message = error?.message || 'Rollback failed';
@@ -1035,6 +1275,328 @@ const D365Toolbar: React.FC = () => {
     setShowRecordNavigator(false);
   };
 
+  // ===== Active Processes =====
+  const loadActiveProcesses = async () => {
+    setActiveProcessesLoading(true);
+    try {
+      const data = await helper.getActiveProcesses();
+      setActiveProcessesData(data);
+    } catch (error: any) {
+      const msg = error?.message || 'Failed to load processes';
+      setActiveProcessesData({ entityName: '', processes: [], error: msg });
+    } finally {
+      setActiveProcessesLoading(false);
+    }
+  };
+
+  const handleShowActiveProcesses = async () => {
+    setShowActiveProcesses(true);
+    if (!activeProcessesData) {
+      setActiveProcessesData({ entityName: '', processes: [] });
+    }
+    await loadActiveProcesses();
+  };
+
+  const handleCloseActiveProcesses = () => {
+    setShowActiveProcesses(false);
+    setActiveProcessesData(null);
+  };
+
+  const handleRefreshActiveProcesses = async () => {
+    await loadActiveProcesses();
+  };
+
+  const handleToggleProcess = async (process: ProcessRecord): Promise<boolean> => {
+    try {
+      const res = await helper.toggleProcess(process.id, !process.isActivated);
+      if (!res?.success) throw new Error(res?.error || 'Toggle failed');
+      showNotification(`${process.isActivated ? 'Deactivated' : 'Activated'} ${process.name}`);
+      // Optimistic local update so the UI reacts even before refresh.
+      setActiveProcessesData((prev) => {
+        if (!prev) return prev;
+        const next = {
+          ...prev,
+          processes: prev.processes.map((p) =>
+            p.id === process.id
+              ? { ...p, isActivated: !process.isActivated, statecode: !process.isActivated ? 1 : 0, statuscode: !process.isActivated ? 2 : 1 }
+              : p
+          ),
+        };
+        return next;
+      });
+      return true;
+    } catch (error: any) {
+      showNotification(error?.message || 'Toggle failed');
+      return false;
+    }
+  };
+
+  // ===== Plugin Steps =====
+  const loadPluginSteps = async () => {
+    setPluginStepsLoading(true);
+    try {
+      const data = await helper.getPluginSteps();
+      setPluginStepsData(data);
+    } catch (error: any) {
+      const msg = error?.message || 'Failed to load plugin steps';
+      setPluginStepsData({ entityName: '', steps: [], error: msg });
+    } finally {
+      setPluginStepsLoading(false);
+    }
+  };
+
+  const handleShowPluginSteps = async () => {
+    setShowPluginSteps(true);
+    if (!pluginStepsData) {
+      setPluginStepsData({ entityName: '', steps: [] });
+    }
+    await loadPluginSteps();
+  };
+
+  const handleClosePluginSteps = () => {
+    setShowPluginSteps(false);
+    setPluginStepsData(null);
+  };
+
+  const handleRefreshPluginSteps = async () => {
+    await loadPluginSteps();
+  };
+
+  const handleUpdatePluginStepImage = async (
+    stepId: string,
+    image: PluginStepImage,
+    patch: Partial<Pick<PluginStepImage, 'name' | 'entityAlias' | 'attributes' | 'imageType'>>
+  ): Promise<boolean> => {
+    try {
+      const res = await helper.updatePluginStepImage({ id: image.id, ...patch });
+      if (!res?.success) throw new Error(res?.error || 'Update failed');
+      showNotification(`Updated image "${patch.name ?? image.name}"`);
+      // Optimistic local update
+      setPluginStepsData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          steps: prev.steps.map((s) =>
+            s.id !== stepId
+              ? s
+              : {
+                  ...s,
+                  images: (s.images || []).map((i) =>
+                    i.id !== image.id
+                      ? i
+                      : {
+                          ...i,
+                          ...patch,
+                          imageTypeLabel:
+                            patch.imageType === undefined
+                              ? i.imageTypeLabel
+                              : patch.imageType === 0
+                              ? 'Pre'
+                              : patch.imageType === 1
+                              ? 'Post'
+                              : patch.imageType === 2
+                              ? 'Both'
+                              : i.imageTypeLabel,
+                        }
+                  ),
+                }
+          ),
+        };
+      });
+      return true;
+    } catch (error: any) {
+      showNotification(error?.message || 'Update image failed');
+      return false;
+    }
+  };
+
+  const handleDeletePluginStepImage = async (stepId: string, imageId: string): Promise<boolean> => {
+    try {
+      const res = await helper.deletePluginStepImage(imageId);
+      if (!res?.success) throw new Error(res?.error || 'Delete failed');
+      showNotification('Image deleted');
+      setPluginStepsData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          steps: prev.steps.map((s) =>
+            s.id !== stepId ? s : { ...s, images: (s.images || []).filter((i) => i.id !== imageId) }
+          ),
+        };
+      });
+      return true;
+    } catch (error: any) {
+      showNotification(error?.message || 'Delete image failed');
+      return false;
+    }
+  };
+
+  const handleCreatePluginStepImage = async (
+    stepId: string,
+    args: { name: string; entityAlias: string; attributes: string; imageType: number }
+  ): Promise<boolean> => {
+    try {
+      const res = await helper.createPluginStepImage({ stepId, ...args });
+      if (!res?.success) throw new Error(res?.error || 'Create failed');
+      showNotification(`Added image "${args.name}"`);
+      // Refresh to pick up the new image
+      await loadPluginSteps();
+      return true;
+    } catch (error: any) {
+      showNotification(error?.message || 'Create image failed');
+      return false;
+    }
+  };
+
+  const handleTogglePluginStep = async (step: PluginStepRecord): Promise<boolean> => {
+    try {
+      const res = await helper.togglePluginStep(step.id, !step.isEnabled);
+      if (!res?.success) throw new Error(res?.error || 'Toggle failed');
+      showNotification(`${step.isEnabled ? 'Disabled' : 'Enabled'} ${step.name}`);
+      setPluginStepsData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          steps: prev.steps.map((s) =>
+            s.id === step.id ? { ...s, isEnabled: !step.isEnabled } : s
+          ),
+        };
+      });
+      return true;
+    } catch (error: any) {
+      showNotification(error?.message || 'Toggle failed');
+      return false;
+    }
+  };
+
+  // ===== Privilege Debugger =====
+  const runPrivilegeDebug = async (entityName: string, recordId: string) => {
+    setPrivilegeDebugLoading(true);
+    try {
+      const data = await helper.getPrivilegeDebug(entityName, recordId);
+      setPrivilegeDebugData(data);
+    } catch (error: any) {
+      setPrivilegeDebugData({
+        inputEntityName: entityName,
+        inputRecordId: recordId,
+        error: error?.message || 'Privilege check failed.',
+      });
+    } finally {
+      setPrivilegeDebugLoading(false);
+    }
+  };
+
+  const handleShowPrivilegeDebug = async () => {
+    setShowPrivilegeDebug(true);
+    // Auto-run if we're already on a record
+    try {
+      const entity = await helper.getEntityName();
+      const id = await helper.getRecordId();
+      if (entity && id) {
+        await runPrivilegeDebug(entity, id);
+      }
+    } catch {
+      // Ignore — user can enter manually.
+    }
+  };
+
+  const handleClosePrivilegeDebug = () => {
+    setShowPrivilegeDebug(false);
+    setPrivilegeDebugData(null);
+  };
+
+  // ===== Command Palette =====
+  const handleOpenCommandPalette = () => setShowCommandPalette(true);
+  const handleCloseCommandPalette = () => setShowCommandPalette(false);
+
+  const persistPaletteSettings = (
+    next: {
+      compactMode?: boolean;
+      pinnedCommandIds?: string[];
+      customCommands?: CustomCommand[];
+      keyBindings?: Record<string, string>;
+    }
+  ) => {
+    const merged = {
+      compactMode: next.compactMode ?? paletteCompactMode,
+      pinnedCommandIds: next.pinnedCommandIds ?? pinnedCommandIds,
+      customCommands: next.customCommands ?? customCommands,
+      keyBindings: next.keyBindings ?? keyBindings,
+    };
+    chrome.storage.sync.set({ paletteSettings: merged });
+  };
+
+  const handleSetBinding = (commandId: string, chord: string | null) => {
+    setKeyBindings((prev) => {
+      const next = { ...prev };
+      if (chord) {
+        next[commandId] = chord;
+      } else {
+        delete next[commandId];
+      }
+      keyBindingsRef.current = next;
+      persistPaletteSettings({ keyBindings: next });
+      return next;
+    });
+  };
+
+  const handleTogglePin = (commandId: string) => {
+    setPinnedCommandIds((prev) => {
+      const next = prev.includes(commandId)
+        ? prev.filter((id) => id !== commandId)
+        : [...prev, commandId];
+      persistPaletteSettings({ pinnedCommandIds: next });
+      return next;
+    });
+  };
+
+  const handleAddCustomCommand = (cmd: { label: string; url: string; description?: string }) => {
+    const newCmd: CustomCommand = {
+      id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label: cmd.label,
+      url: cmd.url,
+      description: cmd.description,
+    };
+    setCustomCommands((prev) => {
+      const next = [...prev, newCmd];
+      persistPaletteSettings({ customCommands: next });
+      return next;
+    });
+    showNotification(`Added "${cmd.label}"`);
+  };
+
+  const handleDeleteCustomCommand = (id: string) => {
+    setCustomCommands((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      persistPaletteSettings({ customCommands: next });
+      return next;
+    });
+    setPinnedCommandIds((prev) => {
+      if (!prev.includes(id)) return prev;
+      const next = prev.filter((p) => p !== id);
+      persistPaletteSettings({ pinnedCommandIds: next });
+      return next;
+    });
+  };
+
+  const handleToggleCompactMode = () => {
+    setPaletteCompactMode((prev) => {
+      const next = !prev;
+      persistPaletteSettings({ compactMode: next });
+      showNotification(next ? 'Compact toolbar enabled' : 'Full toolbar restored');
+      return next;
+    });
+  };
+
+  const handleToggleShowTool = () => {
+    setShowTool((prev) => {
+      const next = !prev;
+      chrome.storage.sync.set({ showTool: next });
+      showNotification(next ? 'Toolbar bar shown' : 'Toolbar bar hidden (Ctrl+K still works)');
+      return next;
+    });
+  };
+
   const handleUnlockFields = async () => {
     try {
       const count = await helper.unlockFields();
@@ -1058,18 +1620,14 @@ const D365Toolbar: React.FC = () => {
     if (showNotificationMessage) {
       showNotification('Activating Developer Mode...');
     }
-    console.log('[D365 Helper] applyDevMode: Starting...');
-    
     try {
       await helper.toggleAllFields(true);
-      console.log('[D365 Helper] applyDevMode: Fields toggled');
     } catch (error) {
       console.error('[D365 Helper] applyDevMode: Failed to toggle fields', error);
     }
     
     try {
       await helper.toggleAllSections(true);
-      console.log('[D365 Helper] applyDevMode: Sections toggled');
     } catch (error) {
       console.error('[D365 Helper] applyDevMode: Failed to toggle sections', error);
     }
@@ -1080,15 +1638,13 @@ const D365Toolbar: React.FC = () => {
     allSectionsVisibleRef.current = true;
     
     try {
-      const unlocked = await helper.unlockFields();
-      console.log('[D365 Helper] applyDevMode: Unlocked', unlocked, 'fields');
+      await helper.unlockFields();
     } catch (error) {
       console.error('[D365 Helper] applyDevMode: Failed to unlock fields', error);
     }
     
     try {
-      const disabled = await helper.disableFieldRequirements();
-      console.log('[D365 Helper] applyDevMode: Disabled', disabled, 'required fields');
+      await helper.disableFieldRequirements();
     } catch (error) {
       console.error('[D365 Helper] applyDevMode: Failed to disable requirements', error);
     }
@@ -1103,7 +1659,6 @@ const D365Toolbar: React.FC = () => {
       await helper.toggleSchemaOverlay(true);
       setShowSchemaNames(true);
       showSchemaNamesRef.current = true;
-      console.log('[D365 Helper] applyDevMode: Schema overlay applied');
     } catch (error) {
       console.error('[D365 Helper] applyDevMode: Failed to toggle schema overlay', error);
     }
@@ -1116,8 +1671,6 @@ const D365Toolbar: React.FC = () => {
     if (showNotificationMessage) {
       showNotification(`Dev Mode: enabled fields and controls for testing.`);
     }
-    
-    console.log('[D365 Helper] applyDevMode: Complete');
   }, [helper]);
 
   // Store refs to functions for use in effects
@@ -1164,7 +1717,9 @@ const D365Toolbar: React.FC = () => {
   }, [removeDevMode]);
 
   const handleEnableDevMode = async () => {
-    const newState = !devModeActive;
+    // Use ref so repeated triggers (e.g. clicking a pinned palette command twice)
+    // always read the freshest dev-mode state instead of a stale closure value.
+    const newState = !devModeActiveRef.current;
 
     try {
       if (newState) {
@@ -1285,8 +1840,9 @@ const D365Toolbar: React.FC = () => {
               className="d365-impersonate-indicator-cancel"
               onClick={handleCancelImpersonation}
               title="Stop impersonating"
+              aria-label="Stop impersonating"
             >
-              ✕
+              <CloseIcon size={12} />
             </button>
           </div>
         );
@@ -1522,6 +2078,34 @@ const D365Toolbar: React.FC = () => {
           </button>
         );
 
+      case 'tools.commandPalette':
+        return (
+          <button key={buttonId} className="d365-toolbar-btn" onClick={handleOpenCommandPalette} title="Command Palette (Ctrl+K)">
+            ⌘ Command (Ctrl+K)
+          </button>
+        );
+
+      case 'tools.activeProcesses':
+        return (
+          <button key={buttonId} className="d365-toolbar-btn" onClick={handleShowActiveProcesses} title="View workflows, business rules, and flows on this entity">
+            Active Processes
+          </button>
+        );
+
+      case 'tools.pluginSteps':
+        return (
+          <button key={buttonId} className="d365-toolbar-btn" onClick={handleShowPluginSteps} title="View registered plugin steps for this entity">
+            Plugin Steps
+          </button>
+        );
+
+      case 'tools.privilegeDebug':
+        return (
+          <button key={buttonId} className="d365-toolbar-btn" onClick={handleShowPrivilegeDebug} title="Diagnose record access and security privileges">
+            Privilege Debug
+          </button>
+        );
+
       default:
         return null;
     }
@@ -1545,34 +2129,88 @@ const D365Toolbar: React.FC = () => {
     );
   };
 
+  // Commands available in the Ctrl+K palette
+  const builtInPaletteCommands: PaletteCommand[] = [
+    { id: 'cmd.toggleCompact', label: paletteCompactMode ? 'Switch to full toolbar' : 'Switch to compact toolbar', section: 'View', keywords: 'minimal hide bar reduce noise compact', run: handleToggleCompactMode },
+    { id: 'cmd.toggleShowTool', label: showTool ? 'Hide toolbar bar' : 'Show toolbar bar', section: 'View', keywords: 'hide show bar visible toolbar', run: handleToggleShowTool },
+    { id: 'cmd.fields.toggle', label: allFieldsVisible ? 'Hide all fields' : 'Show all fields', section: 'Form', keywords: 'show hide visible', run: handleToggleFields },
+    { id: 'cmd.sections.toggle', label: allSectionsVisible ? 'Hide all sections' : 'Show all sections', section: 'Form', keywords: 'show hide visible', run: handleToggleSections },
+    { id: 'cmd.schema.toggle', label: showSchemaNames ? 'Hide schema names' : 'Show schema names', section: 'Schema', keywords: 'logical name field', run: handleToggleSchemaNames },
+    { id: 'cmd.schema.copy', label: 'Copy all schema names', section: 'Schema', keywords: 'clipboard fields', run: handleCopyAllSchemaNames },
+    { id: 'cmd.devmode', label: devModeActive ? 'Deactivate Dev Mode' : 'Activate Dev Mode', section: 'Dev Tools', keywords: 'developer unlock', run: handleEnableDevMode },
+    { id: 'cmd.unlock', label: 'Enable editing on locked fields', section: 'Dev Tools', keywords: 'unlock editable', run: handleUnlockFields },
+    { id: 'cmd.testdata', label: 'Fill form with test data', section: 'Dev Tools', keywords: 'autofill mock', run: handleAutoFill },
+    { id: 'cmd.blur', label: fieldsBlurred ? 'Unblur field values' : 'Blur field values', section: 'Dev Tools', keywords: 'privacy redact', run: handleToggleBlurFields },
+    { id: 'cmd.impersonate', label: 'Impersonate another user', section: 'Dev Tools', keywords: 'security user act as', run: handleShowImpersonation },
+    { id: 'cmd.copyId', label: 'Copy current record ID', section: 'Tools', keywords: 'guid clipboard', run: handleCopyRecordId },
+    { id: 'cmd.cacheRefresh', label: 'Hard refresh (cache reset)', section: 'Tools', keywords: 'reload ctrl f5', run: handleCacheRefresh },
+    { id: 'cmd.webApi', label: 'Open Web API viewer', section: 'Tools', keywords: 'odata json record', run: handleOpenWebAPI },
+    { id: 'cmd.queryBuilder', label: 'Open Advanced Find / Query Builder', section: 'Tools', keywords: 'fetchxml odata', run: handleOpenQueryBuilder },
+    { id: 'cmd.traceLogs', label: 'View Plugin Trace Logs', section: 'Tools', keywords: 'plugin debug', run: handleShowTraceLogs },
+    { id: 'cmd.jsLibraries', label: 'View JS libraries & event handlers', section: 'Tools', keywords: 'script form', run: handleShowLibraries },
+    { id: 'cmd.optionSets', label: 'View option sets on this form', section: 'Tools', keywords: 'picklist values', run: handleShowOptionSets },
+    { id: 'cmd.odataFields', label: 'View OData field metadata', section: 'Tools', keywords: 'attribute metadata', run: handleShowODataFields },
+    { id: 'cmd.auditHistory', label: 'View audit history', section: 'Tools', keywords: 'changes rollback', run: handleShowAuditHistory },
+    { id: 'cmd.activeProcesses', label: 'View active processes (workflows, business rules, flows)', section: 'Tools', keywords: 'workflow business rule flow process', run: handleShowActiveProcesses },
+    { id: 'cmd.pluginSteps', label: 'View registered plugin steps', section: 'Tools', keywords: 'sdk message processing', run: handleShowPluginSteps },
+    { id: 'cmd.privilegeDebug', label: 'Diagnose record access (Privilege Debugger)', section: 'Tools', keywords: 'security role permission why cant i see', run: handleShowPrivilegeDebug },
+    { id: 'cmd.formEditor', label: 'Open form editor', section: 'Tools', keywords: 'classic edit', run: handleOpenFormEditor },
+    { id: 'cmd.navigateTo', label: 'Navigate to a record by entity & ID', section: 'Tools', keywords: 'open jump record', run: handleShowRecordNavigator },
+    { id: 'cmd.promptMaker', label: 'AI Prompt Maker', section: 'Tools', keywords: 'context ai chatgpt claude', run: handleOpenPromptMaker },
+    { id: 'cmd.solutions', label: 'Open Solutions page', section: 'Navigation', keywords: 'maker portal', run: handleOpenSolutions },
+    { id: 'cmd.adminCenter', label: 'Open Power Platform Admin Center', section: 'Navigation', keywords: 'admin environment', run: handleOpenAdminCenter },
+  ];
+
+  // Append user-defined custom commands (open URL in new tab).
+  const customPaletteCommands: PaletteCommand[] = customCommands.map((c) => ({
+    id: c.id,
+    label: c.label,
+    description: c.description || c.url,
+    section: 'Custom',
+    keywords: c.url,
+    isCustom: true,
+    run: () => window.open(c.url, '_blank', 'noopener,noreferrer'),
+  }));
+
+  const paletteCommands: PaletteCommand[] = [...builtInPaletteCommands, ...customPaletteCommands];
+  // Keep the ref in sync each render so the global hotkey listener can dispatch the latest handlers.
+  paletteCommandsRef.current = paletteCommands;
+
   return (
-    <div ref={toolbarRef} className={`d365-toolbar d365-toolbar-${toolbarPosition}`}>
-      <div className="d365-toolbar-content">
-        <div className="d365-toolbar-logo-section">
-          <a
-            href="https://www.reddishgreen.co.uk"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: 'inline-block', lineHeight: 0 }}
-          >
-            <img
-              className="d365-toolbar-logo"
-              src={chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg')}
-              alt="RG Logo"
-              onError={(e) => {
-                console.error('Logo failed to load:', chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg'));
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          </a>
-        </div>
+    <div
+      ref={toolbarRef}
+      className={`d365-toolbar d365-toolbar-${toolbarPosition} ${
+        isBarHidden ? 'd365-toolbar-hidden' : ''
+      }`}
+    >
+      {!isBarHidden && (
+        <div className="d365-toolbar-content">
+          <div className="d365-toolbar-logo-section">
+            <a
+              href="https://www.reddishgreen.co.uk"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'inline-block', lineHeight: 0 }}
+            >
+              <img
+                className="d365-toolbar-logo"
+                src={chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg')}
+                alt="RG Logo"
+                onError={(e) => {
+                  console.error('Logo failed to load:', chrome.runtime.getURL('icons/RG%20Logo_White_Stacked.svg'));
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </a>
+          </div>
 
-        {toolbarConfig.sectionOrder.map(sectionId => renderSection(sectionId))}
+          {toolbarConfig.sectionOrder.map((sectionId) => renderSection(sectionId))}
 
-        <div className="d365-toolbar-section d365-toolbar-actions">
-          <span className="d365-toolbar-version-badge">v{chrome.runtime.getManifest().version}</span>
+          <div className="d365-toolbar-section d365-toolbar-actions">
+            <span className="d365-toolbar-version-badge">v{chrome.runtime.getManifest().version}</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {notification && (
         <div className="d365-toolbar-notification">
@@ -1593,6 +2231,7 @@ const D365Toolbar: React.FC = () => {
           onClose={handleCloseTraceLogs}
           onRefresh={handleRefreshTraceLogs}
           onClear={handleClearTraceLogs}
+          onPopout={handlePopoutTraceLogs}
         />
       )}
 
@@ -1618,13 +2257,14 @@ const D365Toolbar: React.FC = () => {
         />
       )}
 
-      {showAuditHistory && auditHistoryData && (
+      {showAuditHistory && (
         <AuditHistoryViewer
-          data={auditHistoryData}
+          data={auditHistoryData || { records: [] }}
           onClose={handleCloseAuditHistory}
           onRefresh={handleRefreshAuditHistory}
           onRollback={handleAuditRollback}
           onRollbackGroup={handleAuditRollbackGroup}
+          isLoading={auditHistoryLoading}
         />
       )}
       
@@ -1653,6 +2293,53 @@ const D365Toolbar: React.FC = () => {
           currentImpersonation={impersonatedUser}
         />
       )}
+
+      {showActiveProcesses && (
+        <ActiveProcessesViewer
+          data={activeProcessesData}
+          onClose={handleCloseActiveProcesses}
+          onRefresh={handleRefreshActiveProcesses}
+          onToggle={handleToggleProcess}
+          isLoading={activeProcessesLoading}
+        />
+      )}
+
+      {showPluginSteps && (
+        <PluginStepsViewer
+          data={pluginStepsData}
+          onClose={handleClosePluginSteps}
+          onRefresh={handleRefreshPluginSteps}
+          onToggle={handleTogglePluginStep}
+          onUpdateImage={handleUpdatePluginStepImage}
+          onDeleteImage={handleDeletePluginStepImage}
+          onCreateImage={handleCreatePluginStepImage}
+          isLoading={pluginStepsLoading}
+        />
+      )}
+
+      {showPrivilegeDebug && (
+        <PrivilegeDebugger
+          data={privilegeDebugData}
+          defaultEntityName={privilegeDebugData?.inputEntityName}
+          defaultRecordId={privilegeDebugData?.inputRecordId}
+          onClose={handleClosePrivilegeDebug}
+          onRun={runPrivilegeDebug}
+          isLoading={privilegeDebugLoading}
+        />
+      )}
+
+      <CommandPalette
+        open={showCommandPalette}
+        commands={paletteCommands}
+        pinnedIds={pinnedCommandIds}
+        customCommands={customCommands}
+        keyBindings={keyBindings}
+        onClose={handleCloseCommandPalette}
+        onTogglePin={handleTogglePin}
+        onSetBinding={handleSetBinding}
+        onAddCustomCommand={handleAddCustomCommand}
+        onDeleteCustomCommand={handleDeleteCustomCommand}
+      />
     </div>
   );
 };

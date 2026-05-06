@@ -9,7 +9,8 @@ module.exports = {
     injected: './src/content/injected.ts',
     'webapi-viewer': './src/webapi-viewer/index.tsx',
     'query-builder': './src/query-builder/index.tsx',
-    popup: './src/popup/index.tsx'
+    popup: './src/popup/index.tsx',
+    'trace-viewer': './src/trace-viewer/index.tsx'
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -55,6 +56,11 @@ module.exports = {
       template: './src/popup/index.html',
       filename: 'popup.html',
       chunks: ['popup']
+    }),
+    new HtmlWebpackPlugin({
+      template: './src/trace-viewer/index.html',
+      filename: 'trace-viewer.html',
+      chunks: ['trace-viewer']
     })
   ]
 };

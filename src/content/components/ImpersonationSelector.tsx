@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './ImpersonationSelector.css';
+import CloseIcon from './CloseIcon';
 
 export interface SystemUser {
   systemuserid: string;
@@ -220,8 +221,8 @@ const ImpersonationSelector: React.FC<ImpersonationSelectorProps> = ({
             >
               ↻
             </button>
-            <button className="d365-dialog-close" onClick={onClose} title="Close">
-              ×
+            <button className="d365-dialog-close" onClick={onClose} title="Close" aria-label="Close">
+              <CloseIcon />
             </button>
           </div>
         </div>

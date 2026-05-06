@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import './RecordNavigator.css';
+import CloseIcon from './CloseIcon';
 
 export interface EntityInfo {
   LogicalName: string;
@@ -188,8 +189,9 @@ const RecordNavigator: React.FC<RecordNavigatorProps> = ({
                   className="d365-navigate-clear-btn"
                   onClick={handleClearEntity}
                   title="Clear selection"
+                  aria-label="Clear selection"
                 >
-                  ✕
+                  <CloseIcon size={12} />
                 </button>
               </div>
             ) : (
@@ -274,8 +276,8 @@ const RecordNavigator: React.FC<RecordNavigatorProps> = ({
       <div className="d365-dialog-modal d365-navigate-modal">
         <div className="d365-dialog-header d365-navigate-header">
           <h2>Navigate to Record</h2>
-          <button className="d365-dialog-close" onClick={onClose} title="Close">
-            ×
+          <button className="d365-dialog-close" onClick={onClose} title="Close" aria-label="Close">
+            <CloseIcon />
           </button>
         </div>
 

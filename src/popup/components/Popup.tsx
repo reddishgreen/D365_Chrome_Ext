@@ -522,7 +522,8 @@ const Popup: React.FC = () => {
         'schemaOverlayColor',
         'traceLogLimit',
         'skipPluginsByDefault',
-        'toolbarConfig'
+        'toolbarConfig',
+        'paletteSettings'
       ];
 
       const result = await new Promise<any>((resolve) => chrome.storage.sync.get(keys, resolve));
@@ -580,6 +581,35 @@ const Popup: React.FC = () => {
       if (typeof imported.skipPluginsByDefault === 'boolean') next.skipPluginsByDefault = imported.skipPluginsByDefault;
       if (imported.toolbarConfig && typeof imported.toolbarConfig === 'object') {
         next.toolbarConfig = normalizeToolbarConfig(imported.toolbarConfig);
+      }
+      if (imported.paletteSettings && typeof imported.paletteSettings === 'object') {
+        const ps = imported.paletteSettings as any;
+        const cleaned: any = {};
+        if (typeof ps.compactMode === 'boolean') cleaned.compactMode = ps.compactMode;
+        if (Array.isArray(ps.pinnedCommandIds)) {
+          cleaned.pinnedCommandIds = ps.pinnedCommandIds.filter((x: any) => typeof x === 'string');
+        }
+        if (Array.isArray(ps.customCommands)) {
+          cleaned.customCommands = ps.customCommands
+            .filter(
+              (c: any) =>
+                c && typeof c.id === 'string' && typeof c.label === 'string' && typeof c.url === 'string'
+            )
+            .map((c: any) => ({
+              id: c.id,
+              label: c.label,
+              url: c.url,
+              ...(typeof c.description === 'string' ? { description: c.description } : {})
+            }));
+        }
+        if (ps.keyBindings && typeof ps.keyBindings === 'object') {
+          const cleanedBindings: Record<string, string> = {};
+          Object.entries(ps.keyBindings).forEach(([k, v]) => {
+            if (typeof k === 'string' && typeof v === 'string' && v) cleanedBindings[k] = v;
+          });
+          cleaned.keyBindings = cleanedBindings;
+        }
+        next.paletteSettings = cleaned;
       }
 
       await new Promise<void>((resolve) => chrome.storage.sync.set(next, () => resolve()));

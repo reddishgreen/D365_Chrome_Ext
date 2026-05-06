@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CloseIcon from './CloseIcon';
 
 interface EventHandler {
   type: string;
@@ -39,7 +40,7 @@ const FormLibrariesAnalyzer: React.FC<FormLibrariesAnalyzerProps> = ({ data, onC
         <div className="d365-libraries-modal">
           <div className="d365-libraries-header">
             <h2>JavaScript Libraries & Event Handlers</h2>
-            <button className="d365-libraries-close" onClick={onClose} title="Close">✕</button>
+            <button className="d365-libraries-close" onClick={onClose} title="Close" aria-label="Close"><CloseIcon /></button>
           </div>
           <div className="d365-libraries-content">
             <div className="d365-libraries-error">
@@ -135,7 +136,7 @@ const FormLibrariesAnalyzer: React.FC<FormLibrariesAnalyzerProps> = ({ data, onC
       <div className="d365-libraries-modal">
         <div className="d365-libraries-header">
           <h2>JavaScript Libraries & Event Handlers</h2>
-          <button className="d365-libraries-close" onClick={onClose} title="Close">✕</button>
+          <button className="d365-libraries-close" onClick={onClose} title="Close" aria-label="Close"><CloseIcon /></button>
         </div>
 
         <div className="d365-libraries-tabs">

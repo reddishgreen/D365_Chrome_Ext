@@ -44,9 +44,6 @@ export class D365Helper {
           // Ignore responses from old scripts that don't include a version marker.
           // This prevents cached scripts from racing and causing false errors.
           if (!response._scriptVersion) {
-            if (!silent) {
-              console.debug('[D365 Helper] Ignoring response from old injected script (no version).');
-            }
             return; // Keep waiting for a versioned response
           }
 
@@ -151,47 +148,499 @@ export class D365Helper {
       throw new Error('Could not determine current record context');
     }
 
-    const extractGuid = (raw: string): string | null => {
+    const orgUrl = this.getOrgUrl();
+    const allEntities = await this.getAllEntities().catch(() => [] as EntityInfo[]);
+    const entityByLogical = new Map<string, EntityInfo>();
+    allEntities.forEach((entity) => entityByLogical.set(entity.LogicalName.toLowerCase(), entity));
+
+    const sourceEntity = entityByLogical.get(entityName.toLowerCase());
+    const entitySetName = sourceEntity?.EntitySetName || this.getEntitySetName(entityName);
+    const apiUrl = `${orgUrl}/api/data/v9.2/${entitySetName}(${recordId})`;
+
+    const escapeODataLiteral = (value: string): string => value.replace(/'/g, "''");
+
+    const toNormalized = (value?: string | null): string =>
+      String(value ?? '').trim().toLowerCase();
+
+    const isEmptyAuditValue = (value?: string | null): boolean => {
+      const normalized = toNormalized(value);
+      return (
+        normalized === '' ||
+        normalized === '(empty)' ||
+        normalized === 'empty' ||
+        normalized === 'null'
+      );
+    };
+
+    const extractGuid = (raw?: string | null): string | null => {
       if (!raw) return null;
       const match = raw.match(/[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}/);
       if (!match) return null;
-      const clean = match[0].replace(/[{}]/g, '').toLowerCase();
-      // Ensure hyphenated format
-      if (clean.length !== 32) return match[0].replace(/[{}]/g, '');
-      return `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20)}`;
+      const compact = match[0].replace(/[{}-]/g, '').toLowerCase();
+      if (compact.length !== 32) return null;
+      return `${compact.slice(0, 8)}-${compact.slice(8, 12)}-${compact.slice(12, 16)}-${compact.slice(16, 20)}-${compact.slice(20)}`;
     };
 
-    const orgUrl = this.getOrgUrl();
-    const entitySetName = this.getEntitySetName(entityName);
-    const apiUrl = `${orgUrl}/api/data/v9.2/${entitySetName}(${recordId})`;
+    const parseNumberValue = (raw: string): number | null => {
+      const normalized = raw.replace(/,/g, '').replace(/[^\d.+-]/g, '').trim();
+      if (!normalized) return null;
+      const value = Number(normalized);
+      return Number.isFinite(value) ? value : null;
+    };
+
+    interface OptionValue {
+      value: number;
+      label: string;
+    }
+
+    interface OptionAttribute {
+      attributeType: string;
+      isMultiSelect: boolean;
+      options: OptionValue[];
+    }
+
+    interface LookupRelationship {
+      navigationPropertyName: string;
+      referencedEntity: string;
+    }
+
+    interface LookupTargetEntity {
+      logicalName: string;
+      entitySetName: string;
+      primaryIdAttribute: string;
+      primaryNameAttribute: string | null;
+    }
+
+    const optionAttributes = new Map<string, OptionAttribute>();
+
+    try {
+      const optionData = await this.getOptionSets();
+      const attributes = Array.isArray(optionData?.attributes) ? optionData.attributes : [];
+      attributes.forEach((attribute: any) => {
+        const logicalName =
+          typeof attribute?.logicalName === 'string' ? attribute.logicalName : '';
+        if (!logicalName) return;
+
+        const optionsRaw = Array.isArray(attribute?.options) ? attribute.options : [];
+        const options: OptionValue[] = optionsRaw
+          .map((option: any) => ({
+            value: Number(option?.value),
+            label: typeof option?.label === 'string' ? option.label : '',
+          }))
+          .filter((option: OptionValue) => Number.isFinite(option.value));
+
+        optionAttributes.set(logicalName.toLowerCase(), {
+          attributeType: String(attribute?.attributeType || ''),
+          isMultiSelect: Boolean(attribute?.isMultiSelect),
+          options,
+        });
+      });
+    } catch (error) {
+      // Option metadata helps convert labels, but rollback can still proceed without it.
+    }
+
+    const mapOptionLabelToValue = (fieldName: string, rawValue: string): number | null => {
+      const optionInfo = optionAttributes.get(fieldName.toLowerCase());
+      if (!optionInfo) return null;
+
+      const numeric = Number(rawValue);
+      if (Number.isFinite(numeric)) return numeric;
+
+      const normalized = toNormalized(rawValue);
+      const match = optionInfo.options.find(
+        (option) => toNormalized(option.label) === normalized
+      );
+      return match ? match.value : null;
+    };
+
+    const attributeTypeCache = new Map<string, string>();
+    const relationshipCache = new Map<string, LookupRelationship[]>();
+    const targetEntityCache = new Map<string, LookupTargetEntity | null>();
+
+    const getAttributeType = async (fieldName: string): Promise<string> => {
+      const cacheKey = fieldName.toLowerCase();
+      const cached = attributeTypeCache.get(cacheKey);
+      if (cached) return cached;
+
+      const metadataUrl =
+        `${orgUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${escapeODataLiteral(entityName)}')` +
+        `/Attributes(LogicalName='${escapeODataLiteral(fieldName)}')?$select=LogicalName,AttributeType`;
+
+      const response = await fetch(metadataUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Unable to read metadata for ${fieldName} (${response.status}): ${errorText}`
+        );
+      }
+
+      const metadata = await response.json();
+      const attributeType =
+        typeof metadata?.AttributeType === 'string' ? metadata.AttributeType : 'String';
+
+      attributeTypeCache.set(cacheKey, attributeType);
+      return attributeType;
+    };
+
+    const getLookupRelationships = async (fieldName: string): Promise<LookupRelationship[]> => {
+      const cacheKey = fieldName.toLowerCase();
+      const cached = relationshipCache.get(cacheKey);
+      if (cached) return cached;
+
+      const relationshipsUrl =
+        `${orgUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${escapeODataLiteral(entityName)}')` +
+        `/ManyToOneRelationships?$select=ReferencingEntityNavigationPropertyName,ReferencedEntity` +
+        `&$filter=ReferencingAttribute eq '${escapeODataLiteral(fieldName)}'`;
+
+      const response = await fetch(relationshipsUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Unable to resolve lookup relationship for ${fieldName} (${response.status}): ${errorText}`
+        );
+      }
+
+      const json = await response.json();
+      const relationships: LookupRelationship[] = Array.isArray(json?.value)
+        ? json.value
+            .map((item: any) => ({
+              navigationPropertyName:
+                typeof item?.ReferencingEntityNavigationPropertyName === 'string'
+                  ? item.ReferencingEntityNavigationPropertyName
+                  : '',
+              referencedEntity:
+                typeof item?.ReferencedEntity === 'string' ? item.ReferencedEntity : '',
+            }))
+            .filter(
+              (item: LookupRelationship) =>
+                item.navigationPropertyName.length > 0 && item.referencedEntity.length > 0
+            )
+        : [];
+
+      relationshipCache.set(cacheKey, relationships);
+      return relationships;
+    };
+
+    const getTargetEntityInfo = async (
+      logicalName: string
+    ): Promise<LookupTargetEntity | null> => {
+      const cacheKey = logicalName.toLowerCase();
+      if (targetEntityCache.has(cacheKey)) {
+        return targetEntityCache.get(cacheKey) || null;
+      }
+
+      const fromCache = entityByLogical.get(cacheKey);
+      if (fromCache) {
+        const info: LookupTargetEntity = {
+          logicalName: fromCache.LogicalName,
+          entitySetName: fromCache.EntitySetName,
+          primaryIdAttribute: fromCache.PrimaryIdAttribute,
+          primaryNameAttribute: fromCache.PrimaryNameAttribute,
+        };
+        targetEntityCache.set(cacheKey, info);
+        return info;
+      }
+
+      const entityUrl =
+        `${orgUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${escapeODataLiteral(logicalName)}')` +
+        `?$select=LogicalName,EntitySetName,PrimaryIdAttribute,PrimaryNameAttribute`;
+
+      const response = await fetch(entityUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'OData-MaxVersion': '4.0',
+          'OData-Version': '4.0',
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        targetEntityCache.set(cacheKey, null);
+        return null;
+      }
+
+      const json = await response.json();
+      const entitySet =
+        typeof json?.EntitySetName === 'string' ? json.EntitySetName : '';
+      const idAttribute =
+        typeof json?.PrimaryIdAttribute === 'string' ? json.PrimaryIdAttribute : '';
+      if (!entitySet || !idAttribute) {
+        targetEntityCache.set(cacheKey, null);
+        return null;
+      }
+
+      const info: LookupTargetEntity = {
+        logicalName: typeof json?.LogicalName === 'string' ? json.LogicalName : logicalName,
+        entitySetName: entitySet,
+        primaryIdAttribute: idAttribute,
+        primaryNameAttribute:
+          typeof json?.PrimaryNameAttribute === 'string' ? json.PrimaryNameAttribute : null,
+      };
+      targetEntityCache.set(cacheKey, info);
+      return info;
+    };
+
+    const resolveLookupValue = async (
+      fieldName: string,
+      rawValue: string
+    ): Promise<{ navigationPropertyName: string; entitySetName: string; recordId: string }> => {
+      const relationships = await getLookupRelationships(fieldName);
+      if (relationships.length === 0) {
+        throw new Error(`No lookup relationship metadata found for ${fieldName}.`);
+      }
+
+      const guid = extractGuid(rawValue);
+
+      if (guid) {
+        if (relationships.length === 1) {
+          const relationship = relationships[0];
+          const target = await getTargetEntityInfo(relationship.referencedEntity);
+          if (!target) {
+            throw new Error(`Could not resolve target entity metadata for ${fieldName}.`);
+          }
+          return {
+            navigationPropertyName: relationship.navigationPropertyName,
+            entitySetName: target.entitySetName,
+            recordId: guid,
+          };
+        }
+
+        // For polymorphic lookups, verify which target table contains this GUID.
+        for (const relationship of relationships) {
+          const target = await getTargetEntityInfo(relationship.referencedEntity);
+          if (!target) continue;
+
+          const validateUrl =
+            `${orgUrl}/api/data/v9.2/${target.entitySetName}(${guid})` +
+            `?$select=${target.primaryIdAttribute}`;
+
+          const validateResponse = await fetch(validateUrl, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              'OData-MaxVersion': '4.0',
+              'OData-Version': '4.0',
+            },
+            credentials: 'include',
+          });
+
+          if (validateResponse.ok) {
+            return {
+              navigationPropertyName: relationship.navigationPropertyName,
+              entitySetName: target.entitySetName,
+              recordId: guid,
+            };
+          }
+        }
+      }
+
+      // Resolve lookup by primary name when audit value is not a GUID.
+      const lookupName = rawValue.trim();
+      if (!lookupName) {
+        throw new Error(`Lookup value for ${fieldName} is empty.`);
+      }
+
+      for (const relationship of relationships) {
+        const target = await getTargetEntityInfo(relationship.referencedEntity);
+        if (!target || !target.primaryNameAttribute) continue;
+
+        const queryUrl =
+          `${orgUrl}/api/data/v9.2/${target.entitySetName}?` +
+          `$select=${target.primaryIdAttribute}&` +
+          `$filter=${target.primaryNameAttribute} eq '${escapeODataLiteral(lookupName)}'&$top=2`;
+
+        const response = await fetch(queryUrl, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            'OData-MaxVersion': '4.0',
+            'OData-Version': '4.0',
+          },
+          credentials: 'include',
+        });
+
+        if (!response.ok) continue;
+
+        const json = await response.json();
+        const values = Array.isArray(json?.value) ? json.value : [];
+        if (values.length === 0) continue;
+
+        const id = values[0]?.[target.primaryIdAttribute];
+        if (typeof id === 'string' && id.trim()) {
+          return {
+            navigationPropertyName: relationship.navigationPropertyName,
+            entitySetName: target.entitySetName,
+            recordId: id.replace(/[{}]/g, ''),
+          };
+        }
+      }
+
+      throw new Error(
+        `Could not resolve lookup value "${rawValue}" for ${fieldName}. ` +
+          `Use a GUID value for reliable rollback.`
+      );
+    };
 
     // Build the PATCH payload
     const payload: Record<string, any> = {};
     for (const change of changes) {
-      const rawValue = change.oldValue;
+      const fieldName = String(change.fieldName || '').trim();
+      if (!fieldName) continue;
 
-      // If the audit record contains a GUID-looking value, treat as a lookup and use @odata.bind
-      const guid = extractGuid(rawValue);
-      if (guid) {
-        const bindName = `${change.fieldName}@odata.bind`;
-        payload[bindName] = `/${this.getEntitySetName(change.fieldName)}(${guid})`;
+      const rawValue = String(change.oldValue ?? '');
+      const attributeType = (await getAttributeType(fieldName)).toLowerCase();
+
+      if (attributeType === 'lookup' || attributeType === 'customer' || attributeType === 'owner') {
+        const relationships = await getLookupRelationships(fieldName);
+        if (relationships.length === 0) {
+          throw new Error(`No lookup relationship metadata found for ${fieldName}.`);
+        }
+
+        if (isEmptyAuditValue(rawValue)) {
+          // For polymorphic lookups, clear all related navigation properties.
+          relationships.forEach((relationship) => {
+            payload[relationship.navigationPropertyName] = null;
+          });
+          continue;
+        }
+
+        const resolved = await resolveLookupValue(fieldName, rawValue);
+        payload[`${resolved.navigationPropertyName}@odata.bind`] =
+          `/${resolved.entitySetName}(${resolved.recordId})`;
         continue;
       }
 
-      let value: any = rawValue;
-
-      // Try to coerce back to original type
-      if (value === '' || value === null || value === undefined) {
-        value = null;
-      } else if (value === 'true') {
-        value = true;
-      } else if (value === 'false') {
-        value = false;
-      } else if (!isNaN(Number(value)) && value.trim() !== '') {
-        value = Number(value);
+      if (isEmptyAuditValue(rawValue)) {
+        payload[fieldName] = null;
+        continue;
       }
 
-      payload[change.fieldName] = value;
+      if (
+        attributeType === 'picklist' ||
+        attributeType === 'state' ||
+        attributeType === 'status'
+      ) {
+        const mapped = mapOptionLabelToValue(fieldName, rawValue);
+        if (mapped !== null) {
+          payload[fieldName] = Math.trunc(mapped);
+          continue;
+        }
+
+        const numeric = parseNumberValue(rawValue);
+        if (numeric === null) {
+          throw new Error(`Could not parse option value "${rawValue}" for ${fieldName}.`);
+        }
+        payload[fieldName] = Math.trunc(numeric);
+        continue;
+      }
+
+      if (attributeType === 'multiselectpicklist') {
+        const parts = rawValue
+          .split(/[;,]/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+
+        const values: number[] = [];
+        parts.forEach((part) => {
+          const mapped = mapOptionLabelToValue(fieldName, part);
+          if (mapped !== null) {
+            values.push(Math.trunc(mapped));
+            return;
+          }
+
+          const numeric = parseNumberValue(part);
+          if (numeric !== null) {
+            values.push(Math.trunc(numeric));
+          }
+        });
+
+        if (values.length === 0) {
+          throw new Error(
+            `Could not parse multi-select option values "${rawValue}" for ${fieldName}.`
+          );
+        }
+
+        payload[fieldName] = Array.from(new Set(values)).join(',');
+        continue;
+      }
+
+      if (attributeType === 'boolean') {
+        const normalized = toNormalized(rawValue);
+        if (['true', '1', 'yes', 'y'].includes(normalized)) {
+          payload[fieldName] = true;
+          continue;
+        }
+        if (['false', '0', 'no', 'n'].includes(normalized)) {
+          payload[fieldName] = false;
+          continue;
+        }
+
+        const mapped = mapOptionLabelToValue(fieldName, rawValue);
+        if (mapped !== null) {
+          payload[fieldName] = mapped !== 0;
+          continue;
+        }
+
+        throw new Error(`Could not parse boolean value "${rawValue}" for ${fieldName}.`);
+      }
+
+      if (attributeType === 'datetime') {
+        const date = new Date(rawValue);
+        if (!Number.isFinite(date.getTime())) {
+          throw new Error(`Could not parse date value "${rawValue}" for ${fieldName}.`);
+        }
+        payload[fieldName] = date.toISOString();
+        continue;
+      }
+
+      if (attributeType === 'integer' || attributeType === 'bigint') {
+        const numeric = parseNumberValue(rawValue);
+        if (numeric === null) {
+          throw new Error(`Could not parse integer value "${rawValue}" for ${fieldName}.`);
+        }
+        payload[fieldName] = Math.trunc(numeric);
+        continue;
+      }
+
+      if (
+        attributeType === 'decimal' ||
+        attributeType === 'double' ||
+        attributeType === 'money'
+      ) {
+        const numeric = parseNumberValue(rawValue);
+        if (numeric === null) {
+          throw new Error(`Could not parse numeric value "${rawValue}" for ${fieldName}.`);
+        }
+        payload[fieldName] = numeric;
+        continue;
+      }
+
+      if (attributeType === 'uniqueidentifier') {
+        payload[fieldName] = extractGuid(rawValue) || rawValue.trim();
+        continue;
+      }
+
+      // Default fallback: send as string value.
+      payload[fieldName] = rawValue;
     }
 
     const headers: Record<string, string> = {
@@ -483,8 +932,6 @@ export class D365Helper {
 
       const controlInfo = await this.sendRequest('GET_CONTROL_INFO');
 
-      console.log('D365 Helper: Creating overlays for', controlInfo.length, 'controls');
-
       const processedContainers = new Set<HTMLElement>();
       const processedSchemaNames = new Set<string>();
       
@@ -496,7 +943,6 @@ export class D365Helper {
         try {
           // Skip if we already created an overlay for this schema name
           if (processedSchemaNames.has(info.schemaName)) {
-            console.debug('D365 Helper: Schema name already processed:', info.schemaName);
             return;
           }
 
@@ -651,7 +1097,6 @@ export class D365Helper {
               const parentElement = container;
 
               if (processedContainers.has(parentElement)) {
-                console.debug('D365 Helper: Container already processed for', info.schemaName);
                 return;
               }
 
@@ -661,7 +1106,6 @@ export class D365Helper {
                   parentClasses.includes('Inline-Item') ||
                   parentClasses.includes('lookupValue') ||
                   parentElement.querySelector('.ms-crm-Inline-Value, .ms-crm-Inline-Item')) {
-                console.debug('D365 Helper: Skipping lookup value container for', info.schemaName);
                 return;
               }
 
@@ -703,23 +1147,17 @@ export class D365Helper {
 
               parentElement.appendChild(overlay);
               this.overlayElements.push(overlay);
-              console.debug('D365 Helper: Created overlay for', info.schemaName);
             } else {
-              console.debug('D365 Helper: No container found for', info.controlName);
               unfoundFields.push(info);
             }
           } else {
-            console.debug('D365 Helper: Element not found for', info.controlName);
             unfoundFields.push(info);
           }
         } catch (error) {
-          console.debug('D365 Helper: Error creating overlay for', info.controlName, error);
+          // Overlay creation failed for this control; skip it.
         }
       });
 
-      console.log('D365 Helper: Created', this.overlayElements.length, 'overlays');
-      console.log('D365 Helper:', unfoundFields.length, 'fields not found (may be in header flyout)');
-      
       // Store unfound fields and set up observer
       if (unfoundFields.length > 0) {
         this.headerFieldsInfo = unfoundFields;
@@ -753,8 +1191,6 @@ export class D365Helper {
     const tryCreateOverlaysForUnfoundFields = () => {
       if (this.headerFieldsInfo.length === 0) return;
 
-      console.log('D365 Helper: Checking for', this.headerFieldsInfo.length, 'unfound fields');
-      
       const stillUnfound: any[] = [];
 
       this.headerFieldsInfo.forEach((info: any) => {
@@ -875,10 +1311,8 @@ export class D365Helper {
 
           container.appendChild(overlay);
           this.overlayElements.push(overlay);
-          console.log('D365 Helper: Created overlay for previously unfound field:', info.schemaName);
         } catch (error) {
           stillUnfound.push(info);
-          console.debug('D365 Helper: Error creating overlay for unfound field:', info.schemaName, error);
         }
       });
 
@@ -886,7 +1320,6 @@ export class D365Helper {
       this.headerFieldsInfo = stillUnfound;
       
       if (stillUnfound.length === 0 && this.headerObserver) {
-        console.log('D365 Helper: All fields found, disconnecting observer');
         this.headerObserver.disconnect();
         this.headerObserver = null;
       }
@@ -919,8 +1352,6 @@ export class D365Helper {
     setTimeout(() => {
       clearInterval(checkInterval);
     }, 30000);
-
-    console.log('D365 Helper: Observer set up for', this.headerFieldsInfo.length, 'unfound fields');
   }
 
   // Hide schema name overlay
@@ -1028,6 +1459,57 @@ export class D365Helper {
     } catch (error) {
       return { isImpersonating: false, user: null };
     }
+  }
+
+  // ===== ACTIVE PROCESSES =====
+
+  async getActiveProcesses(entityName?: string): Promise<any> {
+    return await this.sendRequest('GET_ACTIVE_PROCESSES', { entityName }, { timeoutMs: 30000 });
+  }
+
+  async toggleProcess(id: string, activate: boolean): Promise<{ success: boolean; error?: string }> {
+    return await this.sendRequest('TOGGLE_PROCESS', { id, activate }, { timeoutMs: 30000 });
+  }
+
+  // ===== PLUGIN STEPS =====
+
+  async getPluginSteps(entityName?: string): Promise<any> {
+    return await this.sendRequest('GET_PLUGIN_STEPS', { entityName }, { timeoutMs: 30000 });
+  }
+
+  async togglePluginStep(id: string, enable: boolean): Promise<{ success: boolean; error?: string }> {
+    return await this.sendRequest('TOGGLE_PLUGIN_STEP', { id, enable }, { timeoutMs: 30000 });
+  }
+
+  async updatePluginStepImage(args: {
+    id: string;
+    name?: string;
+    entityAlias?: string;
+    attributes?: string;
+    imageType?: number;
+  }): Promise<{ success: boolean; error?: string }> {
+    return await this.sendRequest('UPDATE_PLUGIN_STEP_IMAGE', args, { timeoutMs: 30000 });
+  }
+
+  async deletePluginStepImage(id: string): Promise<{ success: boolean; error?: string }> {
+    return await this.sendRequest('DELETE_PLUGIN_STEP_IMAGE', { id }, { timeoutMs: 30000 });
+  }
+
+  async createPluginStepImage(args: {
+    stepId: string;
+    name: string;
+    entityAlias: string;
+    attributes: string;
+    imageType: number;
+    messagePropertyName?: string;
+  }): Promise<{ success: boolean; id?: string; error?: string }> {
+    return await this.sendRequest('CREATE_PLUGIN_STEP_IMAGE', args, { timeoutMs: 30000 });
+  }
+
+  // ===== PRIVILEGE DEBUGGER =====
+
+  async getPrivilegeDebug(entityName: string, recordId: string): Promise<any> {
+    return await this.sendRequest('GET_PRIVILEGE_DEBUG', { entityName, recordId }, { timeoutMs: 60000 });
   }
 }
 

@@ -196,16 +196,22 @@
   border: none;
   color: #999;
   cursor: pointer;
-  font-size: 16px;
-  padding: 2px 6px;
+  padding: 4px 6px;
   border-radius: 4px;
   transition: color 0.15s, background 0.15s;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .d365-navigate-clear-btn:hover {
   color: #dc3545;
   background: rgba(220, 53, 69, 0.08);
+}
+
+.d365-navigate-clear-btn svg {
+  display: block;
 }
 
 /* GUID input */

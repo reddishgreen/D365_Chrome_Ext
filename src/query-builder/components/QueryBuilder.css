@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   z-index: 999999;
-  backdrop-filter: blur(2px);
+  /* backdrop-filter removed - was causing brightness flash on some GPUs */
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -1332,7 +1332,7 @@ svg.spinner {
   align-items: center;
   justify-content: center;
   z-index: 1000000;
-  backdrop-filter: blur(2px);
+  /* backdrop-filter removed - was causing brightness flash on some GPUs */
 }
 
 .export-modal {

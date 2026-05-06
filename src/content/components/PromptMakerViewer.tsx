@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import CloseIcon from './CloseIcon';
 import { CrmApi } from '../../query-builder/utils/api';
 import { EntityMetadata, EntityMetadataComplete, RelationshipMetadata } from '../../query-builder/types';
 import { generatePromptMarkdown, VerbosityLevel, PromptSelections, EntitySelection } from '../utils/promptGenerator';
@@ -150,9 +151,7 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       });
       
       try {
-        console.log('[Prompt Maker] Fetching metadata for', entity.LogicalName);
         const metadata = await api.getEntityMetadata(entity.LogicalName);
-        console.log('[Prompt Maker] Metadata loaded:', metadata.Attributes?.length || 0, 'attributes');
         
         setEntityMetadataMap(prev => {
           const newMap = new Map(prev);
@@ -382,8 +381,6 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       relationshipTypeFilter
     };
     
-    console.log('[Prompt Maker] Saving prompt to file:', promptData);
-
     // Create a blob and download it
     const jsonString = JSON.stringify(promptData, null, 2);
     const blob = new Blob([jsonString], { type: 'application/json' });
@@ -412,8 +409,6 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
         const text = e.target?.result as string;
         const prompt = JSON.parse(text);
         
-        console.log('[Prompt Maker] Loading prompt from file:', prompt);
-
         // Restore entity metadata first
         if (prompt.entityMetadataMap && Array.isArray(prompt.entityMetadataMap)) {
           const restoredMetadata = new Map<string, EntityMetadataComplete>();
@@ -421,16 +416,15 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
             restoredMetadata.set(key, value);
           });
           setEntityMetadataMap(restoredMetadata);
-          console.log('[Prompt Maker] Restored metadata for', restoredMetadata.size, 'entities');
         }
 
         // Restore selections
         const restoredEntities = new Map<string, EntitySelection>();
         if (prompt.selections && prompt.selections.entities) {
-          const entitiesArray = Array.isArray(prompt.selections.entities) 
-            ? prompt.selections.entities 
+          const entitiesArray = Array.isArray(prompt.selections.entities)
+            ? prompt.selections.entities
             : [];
-          
+
           entitiesArray.forEach(([key, value]: [string, any]) => {
             restoredEntities.set(key, {
               entityLogicalName: value.entityLogicalName as string,
@@ -438,14 +432,12 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
               selectedRelationships: (value.selectedRelationships || []) as string[]
             });
           });
-          console.log('[Prompt Maker] Restored selections for', restoredEntities.size, 'entities');
         }
 
         // Restore selected entities
         const entityKeys = Array.from(restoredEntities.keys());
-        console.log('[Prompt Maker] Restoring entity keys:', entityKeys);
         setSelectedEntityLogicalNames(entityKeys);
-        
+
         // Set active tab
         if (entityKeys.length > 0) {
           setActiveEntityTab(entityKeys[0]);
@@ -497,13 +489,9 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
 
   // Load prompt (kept for backward compatibility with old storage-based prompts)
   const handleLoad = useCallback((promptId: string) => {
-    console.log('[Prompt Maker] Loading prompt:', promptId);
     chrome.storage.sync.get(['savedPrompts'], (result) => {
-      console.log('[Prompt Maker] All saved prompts:', result.savedPrompts);
       const prompts = (result.savedPrompts || []) as Array<any>;
       const prompt = prompts.find((p: any) => p.id === promptId);
-      
-      console.log('[Prompt Maker] Found prompt to load:', prompt);
       
       if (!prompt) {
         alert('Prompt not found!');
@@ -518,16 +506,15 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
             restoredMetadata.set(key, value);
           });
           setEntityMetadataMap(restoredMetadata);
-          console.log('[Prompt Maker] Restored metadata for', restoredMetadata.size, 'entities');
         }
 
         // Restore selections
         const restoredEntities = new Map<string, EntitySelection>();
         if (prompt.selections && prompt.selections.entities) {
-          const entitiesArray = Array.isArray(prompt.selections.entities) 
-            ? prompt.selections.entities 
+          const entitiesArray = Array.isArray(prompt.selections.entities)
+            ? prompt.selections.entities
             : [];
-          
+
           entitiesArray.forEach(([key, value]: [string, any]) => {
             restoredEntities.set(key, {
               entityLogicalName: value.entityLogicalName as string,
@@ -535,12 +522,10 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
               selectedRelationships: (value.selectedRelationships || []) as string[]
             });
           });
-          console.log('[Prompt Maker] Restored selections for', restoredEntities.size, 'entities');
         }
 
         // Restore selected entities (this makes them visible in the UI)
         const entityKeys = Array.from(restoredEntities.keys());
-        console.log('[Prompt Maker] Restoring entity keys:', entityKeys);
         setSelectedEntityLogicalNames(entityKeys);
         
         // Set active tab
@@ -611,7 +596,6 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
   const getFilteredFields = useCallback((entityLogicalName: string) => {
     const metadata = entityMetadataMap.get(entityLogicalName);
     if (!metadata) {
-      console.log('[Prompt Maker] No metadata found for', entityLogicalName);
       return [];
     }
 
@@ -622,17 +606,14 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
 
     const searchTerm = fieldSearchTerms.get(entityLogicalName) || '';
     if (!searchTerm) {
-      console.log('[Prompt Maker] Returning all', metadata.Attributes.length, 'attributes for', entityLogicalName);
       return metadata.Attributes;
     }
 
     const lower = searchTerm.toLowerCase();
-    const filtered = metadata.Attributes.filter(attr =>
+    return metadata.Attributes.filter(attr =>
       attr.LogicalName.toLowerCase().includes(lower) ||
       attr.DisplayName.toLowerCase().includes(lower)
     );
-    console.log('[Prompt Maker] Filtered to', filtered.length, 'attributes for', entityLogicalName);
-    return filtered;
   }, [entityMetadataMap, fieldSearchTerms]);
 
   return (
@@ -642,7 +623,7 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       <div className="d365-dialog-modal pm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="d365-dialog-header pm-header">
           <h2>AI Prompt Maker</h2>
-          <button className="d365-dialog-close" onClick={onClose} title="Close">×</button>
+          <button className="d365-dialog-close" onClick={onClose} title="Close" aria-label="Close"><CloseIcon /></button>
         </div>
 
         <div className="pm-content">
@@ -664,8 +645,9 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
                           className="pm-remove-btn"
                           onClick={() => handleRemoveEntity(logicalName)}
                           title="Remove entity"
+                          aria-label="Remove entity"
                         >
-                          ×
+                          <CloseIcon size={12} />
                         </button>
                       </div>
                     );

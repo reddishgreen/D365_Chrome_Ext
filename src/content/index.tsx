@@ -9,10 +9,8 @@ const injectPageScript = () => {
   // Add cache-busting parameter using extension version
   const manifest = chrome.runtime.getManifest();
   const scriptUrl = chrome.runtime.getURL('injected.bundle.js') + '?v=' + manifest.version + '.' + Date.now();
-  console.log('[D365 Helper] Injecting script from:', scriptUrl);
   script.src = scriptUrl;
   script.onload = () => {
-    console.log('[D365 Helper] Injected script loaded successfully');
     script.remove();
   };
   script.onerror = (err) => {
@@ -48,14 +46,11 @@ const initializeToolbar = () => {
     return;
   }
 
-  // Check if the tool should be shown
-  chrome.storage.sync.get(['showTool', 'toolbarPosition'], (result) => {
-    const showTool = result.showTool !== undefined ? result.showTool : true;
+  // Always mount the toolbar component on form pages, regardless of `showTool`.
+  // The component itself decides whether to render the visible bar — but its keyboard
+  // listeners (Ctrl+K, user-bound chords) stay attached either way.
+  chrome.storage.sync.get(['toolbarPosition'], (result) => {
     const toolbarPosition = result.toolbarPosition !== undefined ? result.toolbarPosition : 'bottom';
-
-    if (!showTool) {
-      return;
-    }
 
     // Inject the page script first
     injectPageScript();
@@ -72,7 +67,7 @@ const initializeToolbar = () => {
     // Insert toolbar at the very top of body
     document.body.insertBefore(toolbarContainer, document.body.firstChild);
 
-    // Reserve vertical space for the toolbar
+    // Reserve vertical space for the toolbar (toolbar may reclaim it if hidden)
     setShellContainerOffset(70, toolbarPosition);
 
     // Render React toolbar
@@ -81,10 +76,11 @@ const initializeToolbar = () => {
   });
 };
 
-// Listen for setting changes
+// Listen for setting changes that need a full page reload to take effect.
+// `showTool` no longer requires a reload — the toolbar reacts to it in-place
+// so its keyboard listeners survive a hide/show cycle.
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'sync' && (changes.showTool || changes.toolbarPosition || changes.schemaOverlayColor)) {
-    // Reload the page to apply the setting
+  if (namespace === 'sync' && (changes.toolbarPosition || changes.schemaOverlayColor)) {
     window.location.reload();
   }
 });

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './AuditHistoryViewer.css';
+import CloseIcon from './CloseIcon';
 
 export interface AuditRecord {
   auditId: string;
@@ -7,6 +8,8 @@ export interface AuditRecord {
   fieldName: string;
   oldValue: string;
   newValue: string;
+  rollbackOldValue?: string;
+  rollbackNewValue?: string;
   changedBy: string;
   changedOn: string;
 }
@@ -16,14 +19,18 @@ export interface AuditHistoryData {
   recordName?: string;
   entityName?: string;
   error?: string;
+  totalAuditEntries?: number;
+  truncated?: boolean;
+  maxRecords?: number;
 }
 
 interface AuditHistoryViewerProps {
   data: AuditHistoryData;
   onClose: () => void;
   onRefresh: () => void;
-  onRollback?: (fieldName: string, oldValue: string, skipPlugins?: boolean) => Promise<boolean>;
-  onRollbackGroup?: (changes: { fieldName: string; oldValue: string }[], skipPlugins?: boolean) => Promise<boolean>;
+  onRollback?: (record: AuditRecord, skipPlugins?: boolean) => Promise<boolean>;
+  onRollbackGroup?: (records: AuditRecord[], skipPlugins?: boolean) => Promise<boolean>;
+  isLoading?: boolean;
 }
 
 interface AuditGroup {
@@ -39,10 +46,10 @@ type RollbackState = 'idle' | 'rolling-back' | 'success' | 'error';
 
 interface ConfirmInfo {
   type: 'field' | 'group';
-  fieldName?: string;
-  oldValue?: string;
-  changes?: { fieldName: string; oldValue: string }[];
+  record?: AuditRecord;
+  records?: AuditRecord[];
   groupLabel?: string;
+  rollbackKey: string;
 }
 
 const GROUP_COLORS = ['#0078d4', '#107c10', '#8764b8', '#d83b01', '#008272'];
@@ -53,6 +60,7 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
   onRefresh,
   onRollback,
   onRollbackGroup,
+  isLoading = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAction, setFilterAction] = useState<string>('all');
@@ -86,9 +94,12 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
   const filteredRecords = data.records.filter(record => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
+      !q ||
       record.fieldName.toLowerCase().includes(q) ||
-      record.oldValue.toLowerCase().includes(q) ||
-      record.newValue.toLowerCase().includes(q) ||
+      (record.oldValue || '').toLowerCase().includes(q) ||
+      (record.newValue || '').toLowerCase().includes(q) ||
+      (record.rollbackOldValue || '').toLowerCase().includes(q) ||
+      (record.rollbackNewValue || '').toLowerCase().includes(q) ||
       record.changedBy.toLowerCase().includes(q);
 
     const matchesAction = filterAction === 'all' || record.action === filterAction;
@@ -137,23 +148,20 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
 
   // -- Rollback handlers --
 
-  const requestFieldRollback = (record: AuditRecord) => {
+  const requestFieldRollback = (record: AuditRecord, rollbackKey: string) => {
     setConfirmInfo({
       type: 'field',
-      fieldName: record.fieldName,
-      oldValue: record.oldValue,
+      record,
+      rollbackKey,
     });
   };
 
   const requestGroupRollback = (group: AuditGroup) => {
-    const changes = group.records.map(r => ({
-      fieldName: r.fieldName,
-      oldValue: r.oldValue,
-    }));
     setConfirmInfo({
       type: 'group',
-      changes,
+      records: group.records,
       groupLabel: `${group.changedBy} - ${formatDate(group.changedOn)}`,
+      rollbackKey: group.key,
     });
   };
 
@@ -162,20 +170,20 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
     setConfirmBusy(true);
 
     try {
-      if (confirmInfo.type === 'field' && onRollback && confirmInfo.fieldName !== undefined) {
-        const key = confirmInfo.fieldName;
+      if (confirmInfo.type === 'field' && onRollback && confirmInfo.record) {
+        const key = confirmInfo.rollbackKey;
         setRollbackStates(prev => new Map(prev).set(key, 'rolling-back'));
-        const success = await onRollback(confirmInfo.fieldName, confirmInfo.oldValue || '', skipPlugins);
+        const success = await onRollback(confirmInfo.record, skipPlugins);
         setRollbackStates(prev => new Map(prev).set(key, success ? 'success' : 'error'));
         if (success) {
           setTimeout(() => {
             setRollbackStates(prev => { const n = new Map(prev); n.delete(key); return n; });
           }, 2000);
         }
-      } else if (confirmInfo.type === 'group' && onRollbackGroup && confirmInfo.changes) {
-        const groupKey = confirmInfo.groupLabel || 'group';
+      } else if (confirmInfo.type === 'group' && onRollbackGroup && confirmInfo.records) {
+        const groupKey = confirmInfo.rollbackKey;
         setRollbackStates(prev => new Map(prev).set(groupKey, 'rolling-back'));
-        const success = await onRollbackGroup(confirmInfo.changes, skipPlugins);
+        const success = await onRollbackGroup(confirmInfo.records, skipPlugins);
         setRollbackStates(prev => new Map(prev).set(groupKey, success ? 'success' : 'error'));
         if (success) {
           setTimeout(() => {
@@ -239,12 +247,25 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
             )}
           </div>
           <div className="audit-history-actions">
-            <button onClick={onRefresh} className="audit-history-refresh-btn" title="Refresh">↻</button>
-            <button onClick={onClose} className="audit-history-close-btn" title="Close">✕</button>
+            {isLoading && <span className="audit-history-loading-pill">Loading...</span>}
+            <button
+              onClick={onRefresh}
+              className="audit-history-refresh-btn"
+              title={isLoading ? 'Loading audit history...' : 'Refresh'}
+              disabled={isLoading}
+            >
+              ↻
+            </button>
+            <button onClick={onClose} className="audit-history-close-btn" title="Close" aria-label="Close"><CloseIcon /></button>
           </div>
         </div>
 
-        {data.error ? (
+        {isLoading && data.records.length === 0 && !data.error ? (
+          <div className="audit-history-loading-state">
+            <div className="audit-history-spinner" />
+            <p>Loading audit history. Large records can take up to 2 minutes.</p>
+          </div>
+        ) : data.error ? (
           <div className="audit-history-error"><p>{data.error}</p></div>
         ) : (
           <>
@@ -267,12 +288,24 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
               </select>
               <div className="audit-history-count">
                 {groups.length} save{groups.length !== 1 ? 's' : ''} &middot; {totalFieldChanges} field change{totalFieldChanges !== 1 ? 's' : ''}
+                {typeof data.totalAuditEntries === 'number' && (
+                  <>
+                    {' '}&middot; {data.totalAuditEntries} audit entr{data.totalAuditEntries === 1 ? 'y' : 'ies'} loaded
+                  </>
+                )}
               </div>
               <div className="audit-history-collapse-btns">
                 <button onClick={expandAll} className="audit-collapse-btn">Expand all</button>
                 <button onClick={collapseAll} className="audit-collapse-btn">Collapse all</button>
               </div>
             </div>
+
+            {data.truncated && (
+              <div className="audit-history-truncation-banner">
+                Showing the most recent {data.maxRecords ?? data.totalAuditEntries} audit entries.
+                Older history exists for this record but isn't being displayed.
+              </div>
+            )}
 
             {groups.length === 0 ? (
               <div className="audit-history-no-data">
@@ -286,7 +319,7 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
                   const color = GROUP_COLORS[group.colorIndex];
                   const collapsed = collapsedGroups.has(group.key);
                   const count = group.records.length;
-                  const groupRollbackKey = `${group.changedBy} - ${formatDate(group.changedOn)}`;
+                  const groupRollbackKey = group.key;
 
                   return (
                     <div key={group.key} className="audit-group-card">
@@ -324,11 +357,11 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
                       {/* Field change rows */}
                       {!collapsed && (
                         <div className="audit-field-list">
-                          {group.records.map((record, idx) => (
-                            <div
-                              key={`${record.auditId}_${idx}`}
-                              className="audit-field-row"
-                            >
+                          {group.records.map((record, idx) => {
+                            const rowRollbackKey = `${record.auditId}_${idx}`;
+
+                            return (
+                            <div key={rowRollbackKey} className="audit-field-row">
                               <div className="audit-field-name-col">
                                 <span className="audit-field-name">{record.fieldName}</span>
                               </div>
@@ -358,16 +391,17 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
                               {canRollback && group.action.toLowerCase() === 'update' && (
                                 <div className="audit-rollback-col">
                                   <button
-                                    className={getRollbackBtnClass(record.fieldName)}
-                                    onClick={() => requestFieldRollback(record)}
+                                    className={getRollbackBtnClass(rowRollbackKey)}
+                                    onClick={() => requestFieldRollback(record, rowRollbackKey)}
                                     title={`Revert ${record.fieldName} to previous value`}
                                   >
-                                    ↶ {getRollbackBtnLabel(record.fieldName)}
+                                    ↶ {getRollbackBtnLabel(rowRollbackKey)}
                                   </button>
                                 </div>
                               )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -391,17 +425,18 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
               {confirmInfo.type === 'field' ? (
                 <>
                   <p>
-                    Are you sure you want to revert <strong>{confirmInfo.fieldName}</strong> to its previous value?
+                    Are you sure you want to revert{' '}
+                    <strong>{confirmInfo.record?.fieldName}</strong> to its previous value?
                   </p>
                   <div className="audit-confirm-detail">
                     <div className="audit-confirm-field">
                       <span className="audit-confirm-field-label">Field</span>
-                      <span className="audit-confirm-field-value">{confirmInfo.fieldName}</span>
+                      <span className="audit-confirm-field-value">{confirmInfo.record?.fieldName}</span>
                     </div>
                     <div className="audit-confirm-field">
                       <span className="audit-confirm-field-label">Revert to</span>
                       <span className="audit-confirm-field-value">
-                        {confirmInfo.oldValue || '(empty)'}
+                        {confirmInfo.record?.oldValue || '(empty)'}
                       </span>
                     </div>
                   </div>
@@ -409,10 +444,15 @@ const AuditHistoryViewer: React.FC<AuditHistoryViewerProps> = ({
               ) : (
                 <>
                   <p>
-                    Are you sure you want to rollback <strong>{confirmInfo.changes?.length} field{(confirmInfo.changes?.length || 0) > 1 ? 's' : ''}</strong> from this save?
+                    Are you sure you want to rollback{' '}
+                    <strong>
+                      {confirmInfo.records?.length} field
+                      {(confirmInfo.records?.length || 0) > 1 ? 's' : ''}
+                    </strong>{' '}
+                    from this save?
                   </p>
                   <div className="audit-confirm-detail">
-                    {confirmInfo.changes?.map((c, i) => (
+                    {confirmInfo.records?.map((c, i) => (
                       <div key={i} className="audit-confirm-field">
                         <span className="audit-confirm-field-label">{c.fieldName}</span>
                         <span className="audit-confirm-field-value">

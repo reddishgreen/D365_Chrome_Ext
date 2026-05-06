@@ -169,7 +169,6 @@
   border: none;
   color: #1976d2;
   cursor: pointer;
-  font-size: 18px;
   line-height: 1;
   padding: 0;
   width: 18px;
@@ -183,6 +182,10 @@
 
 .pm-remove-btn:hover {
   background: rgba(25, 118, 210, 0.1);
+}
+
+.pm-remove-btn svg {
+  display: block;
 }
 
 /* Entity Tabs */

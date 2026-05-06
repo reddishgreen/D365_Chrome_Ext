@@ -142,16 +142,10 @@ const QueryBuilder: React.FC<QueryBuilderProps> = ({ orgUrl: propOrgUrl, onClose
       const query = buildODataQuery(selectedEntity, joinedEntities, selectedColumns, filters);
       setExecutedQuery(query);
 
-      // Debug logging
-      console.log('Executing OData Query:', query);
-      console.log('Selected Columns:', selectedColumns);
-      console.log('Main Entity:', selectedEntity);
-
       const data = await api.executeQuery(query);
       setResults(data.value || []);
     } catch (err) {
       console.error('Query execution error:', err);
-      console.error('Query was:', executedQuery);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);

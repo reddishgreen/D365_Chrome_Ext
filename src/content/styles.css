@@ -37,8 +37,8 @@
 .d365-toolbar-content {
   display: flex;
   flex-wrap: nowrap; /* Single line - no wrapping */
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 5px 10px;
   align-items: center;
   overflow-x: auto; /* Allow horizontal scrolling */
   overflow-y: visible; /* Allow dropdowns to show */
@@ -67,8 +67,8 @@
 .d365-toolbar-logo-section {
   display: flex;
   align-items: center;
-  padding: 2px 8px;
-  margin-right: 12px;
+  padding: 2px 6px;
+  margin-right: 8px;
 }
 
 .d365-toolbar-logo-section a {
@@ -80,7 +80,7 @@
 }
 
 .d365-toolbar-logo {
-  height: 40px;
+  height: 32px;
   width: auto;
   object-fit: contain;
   display: block;
@@ -92,14 +92,14 @@
   align-items: center;
   flex-wrap: nowrap;
   flex-shrink: 0; /* Prevent section compression that causes label wrapping */
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 5px;
+  padding: 3px 7px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 4px;
 }
 
 .d365-toolbar-section-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   opacity: 0.9;
   margin-right: 4px;
@@ -110,14 +110,15 @@
   background: white;
   color: #000;
   border: none;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   transition: all 0.2s ease;
   white-space: nowrap;
+  line-height: 1.4;
 }
 
 .d365-toolbar-btn:hover {
@@ -227,31 +228,41 @@
   height: 20px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease, transform 0.2s ease;
+  transition: background 0.15s ease;
   flex-shrink: 0;
+  padding: 0;
 }
 
 .d365-impersonate-indicator-cancel:hover {
   background: rgba(0, 0, 0, 0.4);
-  transform: scale(1.1);
+}
+
+.d365-impersonate-indicator-cancel svg {
+  display: block;
 }
 
 .d365-toolbar-actions {
   margin-left: auto;
   flex-shrink: 0; /* Don't shrink the version badge */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Compact mode: bar is fully hidden. Ctrl+K and any user-bound chords still work. */
+.d365-toolbar-hidden {
+  display: none !important;
 }
 
 .d365-toolbar-version-badge {
   background: rgba(255, 255, 255, 0.15);
   color: white;
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 3px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   white-space: nowrap;
@@ -374,21 +385,24 @@
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: white;
-  font-size: 24px;
   width: 32px;
   height: 32px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s ease;
+  transition: background 0.15s ease;
   padding: 0;
   line-height: 1;
 }
 
 .d365-libraries-close:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.d365-libraries-close svg {
+  display: block;
 }
 
 .d365-libraries-tabs {
@@ -729,23 +743,24 @@
   background: rgba(255, 255, 255, 0.15);
   border: none;
   color: white;
-  font-size: 24px;
-  font-family: Arial, sans-serif;
-  font-weight: normal;
   line-height: 1;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  padding: 0;
+  transition: background 0.15s ease;
 }
 
 .d365-dialog-close:hover {
   background: rgba(255, 255, 255, 0.3);
-  transform: rotate(90deg);
+}
+
+.d365-dialog-close svg {
+  display: block;
 }
 
 .d365-dialog-content {
@@ -781,44 +796,19 @@
   color: #9a4c1a;
 }
 
-.d365-trace-modal {
-  max-width: none;
-  width: 95%;
-  max-height: 95vh;
-  display: flex;
-  flex-direction: column;
+/* Shared copy icon used by multiple dialog components */
+.d365-copy-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
-.d365-trace-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-shrink: 0;
+.d365-copy-success {
+  color: #107c10;
+  font-weight: 600;
 }
 
-.d365-trace-header-left {
-  display: flex;
-  align-items: center;
-}
-
-.d365-trace-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.d365-trace-logo {
-  width: 28px;
-  height: 28px;
-  color: white;
-  opacity: 0.9;
-  transition: opacity 0.2s ease;
-}
-
-.d365-trace-logo:hover {
-  opacity: 1;
-}
-
+/* Shared refresh button used by multiple dialog components */
 .d365-trace-refresh {
   border: none;
   width: 34px;
@@ -841,668 +831,6 @@
   cursor: not-allowed;
 }
 
-.d365-trace-clear {
-  border: none;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.d365-trace-clear:hover:not(:disabled) {
-  /* Non-destructive "clear view" */
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.d365-trace-clear:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.d365-trace-tabs {
-  display: flex;
-  background: white;
-  border-bottom: 1px solid #ddd;
-  flex-shrink: 0;
-}
-
-/* Trace log filters */
-.d365-trace-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: #f7f9fc;
-  border-bottom: 1px solid #e1e6ef;
-  flex-shrink: 0;
-}
-
-.d365-trace-filter-toggle {
-  border: 1px solid #cdd6e5;
-  background: white;
-  color: #0C274C;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.d365-trace-filter-toggle:hover {
-  background: rgba(12, 39, 76, 0.06);
-}
-
-.d365-trace-filter-summary {
-  font-size: 12px;
-  color: #333;
-}
-
-.d365-trace-filter-summary strong {
-  color: #0C274C;
-}
-
-.d365-trace-filter-clear-btn {
-  margin-left: auto;
-  border: 1px solid #cdd6e5;
-  background: white;
-  color: #333;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.d365-trace-filter-clear-btn:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.d365-trace-filter-clear-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.d365-trace-filter-panel {
-  padding: 12px 14px 10px 14px;
-  background: #ffffff;
-  border-bottom: 1px solid #e1e6ef;
-  flex-shrink: 0;
-}
-
-.d365-trace-filter-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
-  gap: 10px 12px;
-}
-
-.d365-trace-filter-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.d365-trace-filter-field label {
-  font-size: 11px;
-  font-weight: 700;
-  color: #0C274C;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-
-.d365-trace-filter-field input[type="text"],
-.d365-trace-filter-field input[type="number"],
-.d365-trace-filter-field input[type="datetime-local"] {
-  border: 1px solid #cdd6e5;
-  border-radius: 6px;
-  padding: 7px 10px;
-  font-size: 12px;
-  outline: none;
-  background: #fff;
-}
-
-.d365-trace-filter-field input:focus {
-  border-color: #0C274C;
-  box-shadow: 0 0 0 3px rgba(12, 39, 76, 0.12);
-}
-
-.d365-trace-filter-quick-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.d365-trace-filter-quick-buttons button {
-  border: 1px solid #cdd6e5;
-  background: #fff;
-  padding: 7px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.d365-trace-filter-quick-buttons button:hover {
-  background: rgba(12, 39, 76, 0.06);
-}
-
-.d365-trace-filter-checks {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 0 0 0;
-}
-
-.d365-trace-filter-checks label,
-.d365-trace-filter-check label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #333;
-  font-weight: 500;
-}
-
-.d365-trace-filter-range {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.d365-trace-filter-range span {
-  color: #666;
-  font-size: 12px;
-}
-
-.d365-trace-filter-wide {
-  grid-column: span 2;
-}
-
-.d365-trace-filter-note {
-  margin-top: 10px;
-  font-size: 11px;
-  color: #666;
-}
-
-.d365-trace-tab {
-  flex: 1;
-  padding: 12px 16px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s ease;
-}
-
-.d365-trace-tab:hover {
-  background: rgba(0, 120, 212, 0.08);
-  color: #005a9e;
-}
-
-.d365-trace-tab-active {
-  background: #f5f5f5;
-  color: #005a9e;
-  font-weight: 600;
-  border-bottom: 3px solid #005a9e;
-}
-
-.d365-trace-content {
-  background: #f5f6fa;
-}
-
-/* KEY FIX: flex: 1 + min-height: 0 so the split view fills remaining space
-   regardless of whether filters are open or closed. No more fixed calc(). */
-.d365-trace-content-split {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  background: #f5f6fa;
-  border-radius: 0 0 8px 8px;
-  overflow: hidden;
-}
-
-.d365-trace-list-panel {
-  width: 420px;
-  min-width: 360px;
-  max-width: 500px;
-  overflow-y: auto;
-  border-right: 1px solid #ddd;
-  background: #fafafa;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.d365-trace-list-item {
-  background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.d365-trace-list-item:hover {
-  border-color: #0078d4;
-  box-shadow: 0 2px 8px rgba(0, 120, 212, 0.15);
-}
-
-.d365-trace-list-item-selected {
-  background: #e6f2ff;
-  border-color: #0078d4;
-  border-width: 2px;
-  padding: 9px 11px;
-}
-
-.d365-trace-list-item--error {
-  border-left: 3px solid #c00000;
-}
-
-.d365-trace-list-item--error.d365-trace-list-item-selected {
-  border-left: 3px solid #c00000;
-}
-
-.d365-trace-list-item-top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.d365-trace-list-item-message {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1d3c72;
-  line-height: 1.4;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.d365-trace-list-item-badges {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.d365-trace-list-item-mode {
-  font-size: 9px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-
-.d365-trace-list-item-mode--sync {
-  background: #e3f2fd;
-  color: #1565c0;
-}
-
-.d365-trace-list-item-mode--async {
-  background: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.d365-trace-list-item-duration {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 2px 6px;
-  border-radius: 3px;
-  background: #f0f0f0;
-  color: #555;
-  white-space: nowrap;
-  font-family: 'Consolas', 'Courier New', monospace;
-}
-
-.d365-trace-list-item-duration--medium {
-  background: #fff3e0;
-  color: #e65100;
-}
-
-.d365-trace-list-item-duration--slow {
-  background: #fce4ec;
-  color: #c62828;
-}
-
-.d365-trace-list-item-error {
-  color: #c00000;
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.d365-trace-list-item-plugin {
-  font-size: 11px;
-  color: #777;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: 'Consolas', 'Courier New', monospace;
-}
-
-.d365-trace-list-item-bottom {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 2px;
-}
-
-.d365-trace-list-item-entity {
-  background: rgba(0, 101, 189, 0.1);
-  color: #005a9e;
-  padding: 2px 7px;
-  border-radius: 10px;
-  font-size: 10px;
-  text-transform: uppercase;
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.d365-trace-list-item-time {
-  font-size: 10px;
-  color: #888;
-  line-height: 1.3;
-}
-
-.d365-trace-list-item-user {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: #666;
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid #f0f0f0;
-}
-
-.d365-trace-list-item-user-icon {
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-.d365-trace-details-panel-wrapper {
-  flex: 1;
-  overflow-y: auto;
-  background: #f9f9f9;
-  min-width: 0;
-}
-
-.d365-trace-details-panel {
-  padding: 20px 24px;
-}
-
-.d365-trace-details-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #999;
-  font-size: 14px;
-  font-style: italic;
-}
-
-.d365-trace-details-header {
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  border: 1px solid #e0e0e0;
-}
-
-.d365-trace-details-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-
-.d365-trace-message-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1d3c72;
-}
-
-.d365-trace-entity-badge {
-  background: rgba(0, 101, 189, 0.1);
-  color: #005a9e;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-.d365-trace-error-badge {
-  background: rgba(200, 0, 0, 0.15);
-  color: #c00000;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.d365-trace-details-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 13px;
-  color: #666;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.d365-trace-details-meta-user {
-  font-weight: 500;
-  color: #555;
-}
-
-.d365-trace-details-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.d365-trace-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.d365-trace-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.d365-trace-detail-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #7a7a7a;
-}
-
-.d365-trace-detail-value {
-  font-size: 13px;
-  color: #333;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  min-width: 0;
-}
-
-.d365-trace-copy-btn {
-  border: 1px solid #d0d0d0;
-  background: transparent;
-  border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.d365-trace-copy-btn:hover {
-  border-color: #0078d4;
-  color: #0078d4;
-  background: rgba(0, 120, 212, 0.08);
-}
-
-.d365-trace-copy-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  border-color: #e0e0e0;
-  color: #999;
-  background: #f5f5f5;
-}
-
-.d365-copy-icon {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
-
-.d365-copy-success {
-  color: #107c10;
-  font-weight: 600;
-}
-
-.d365-trace-section {
-  background: white;
-  border: 1px solid #e5e5e5;
-  border-radius: 6px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.d365-trace-section--error {
-  border-color: rgba(200, 0, 0, 0.2);
-}
-
-.d365-trace-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.d365-trace-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-}
-
-.d365-trace-section-title--error {
-  color: #c00000;
-}
-
-.d365-trace-section-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.d365-trace-section-toggle {
-  border: 1px solid #d0d0d0;
-  background: transparent;
-  border-radius: 4px;
-  padding: 3px 10px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  color: #555;
-  font-weight: 500;
-}
-
-.d365-trace-section-toggle:hover {
-  background: #f0f0f0;
-  border-color: #bbb;
-}
-
-.d365-trace-pre {
-  margin: 0;
-  overflow-y: auto;
-  background: #f5f5f5;
-  border-radius: 4px;
-  padding: 10px;
-  font-size: 12px;
-  line-height: 1.45;
-  font-family: 'Consolas', 'Courier New', monospace;
-  color: #2b3a55;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.d365-trace-pre--expanded {
-  max-height: none;
-}
-
-.d365-trace-pre--collapsed {
-  max-height: 200px;
-  overflow: hidden;
-  position: relative;
-}
-
-.d365-trace-pre--collapsed::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: linear-gradient(transparent, #f5f5f5);
-  pointer-events: none;
-}
-
-.d365-trace-pre-error {
-  background: rgba(200, 0, 0, 0.06);
-  border: 1px solid rgba(200, 0, 0, 0.15);
-  color: #800000;
-}
-
-.d365-trace-pre-error.d365-trace-pre--collapsed::after {
-  background: linear-gradient(transparent, rgba(255, 240, 240, 1));
-}
-
-.d365-trace-empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: #666;
-  font-size: 14px;
-  background: white;
-  border-radius: 8px;
-  border: 1px dashed #d0d0d0;
-  margin: 20px;
-  flex: 1;
-}
-
-.d365-trace-more-records {
-  margin-top: 18px;
-  font-size: 12px;
-  color: #666;
-  text-align: center;
-}
-
 @media (max-width: 768px) {
   .d365-dialog-modal {
     max-width: 95%;
@@ -1515,38 +843,6 @@
 
   .d365-dialog-content {
     padding: 18px;
-  }
-
-  .d365-trace-modal {
-    max-width: 96%;
-  }
-
-  .d365-trace-detail-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .d365-trace-content-split {
-    flex-direction: column;
-    min-height: 400px;
-  }
-
-  .d365-trace-list-panel {
-    width: 100%;
-    max-height: 200px;
-    border-right: none;
-    border-bottom: 1px solid #ddd;
-  }
-
-  .d365-trace-details-panel-wrapper {
-    flex: 1;
-  }
-
-  .d365-trace-filter-grid {
-    grid-template-columns: repeat(2, minmax(160px, 1fr));
-  }
-
-  .d365-trace-filter-wide {
-    grid-column: span 2;
   }
 }
 
@@ -1599,7 +895,20 @@
   background: transparent;
   color: #0078d4;
   cursor: pointer;
-  font-size: 16px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.d365-options-search-clear:hover {
+  background: rgba(0, 120, 212, 0.1);
+}
+
+.d365-options-search-clear svg {
+  display: block;
 }
 
 .d365-options-content {

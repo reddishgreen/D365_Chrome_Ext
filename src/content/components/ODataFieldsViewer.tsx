@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import CloseIcon from './CloseIcon';
 
 export interface ODataField {
   logicalName: string;
@@ -349,8 +350,8 @@ const ODataFieldsViewer: React.FC<ODataFieldsViewerProps> = ({ data, onClose, on
             >
               ↻
             </button>
-            <button className="d365-dialog-close" onClick={onClose} title="Close">
-              ×
+            <button className="d365-dialog-close" onClick={onClose} title="Close" aria-label="Close">
+              <CloseIcon />
             </button>
           </div>
         </div>
@@ -373,8 +374,9 @@ const ODataFieldsViewer: React.FC<ODataFieldsViewerProps> = ({ data, onClose, on
                   className="d365-options-search-clear"
                   onClick={() => setSearchTerm('')}
                   title="Clear search"
+                  aria-label="Clear search"
                 >
-                  ×
+                  <CloseIcon size={12} />
                 </button>
               )}
               <button
