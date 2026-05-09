@@ -33,7 +33,11 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
   const [relationshipsExpanded, setRelationshipsExpanded] = useState(true);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [promptName, setPromptName] = useState('');
+  const [generatedAt, setGeneratedAt] = useState<string>(() => new Date().toISOString());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Tracks relationships the user has explicitly toggled off so auto-include
+  // doesn't re-add them on subsequent state changes.
+  const userDeselectedRelsRef = useRef<Set<string>>(new Set());
 
   // Note: Prompts are now saved/loaded as JSON files to avoid Chrome storage quota limits
 
@@ -276,49 +280,74 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
     });
   }, []);
 
-  // Get available relationships between selected entities
+  // Get available relationships between selected entities.
+  // The same SchemaName can appear in multiple buckets (e.g. account.OneToMany
+  // and contact.ManyToOne refer to the same 1:N metadata). Pick a canonical
+  // form deterministically: OneToMany > ManyToMany > ManyToOne, so the labelled
+  // type and direction don't depend on the order entities were added.
   const availableRelationships = useMemo(() => {
-    const rels: RelationshipMetadata[] = [];
     const entitySet = new Set(selectedEntityLogicalNames);
+    const rank = (t: RelationshipMetadata['RelationshipType']) =>
+      t === 'OneToMany' ? 0 : t === 'ManyToMany' ? 1 : 2;
+    const bySchema = new Map<string, RelationshipMetadata>();
 
     entityMetadataMap.forEach((metadata, entityLogicalName) => {
       if (!entitySet.has(entityLogicalName)) return;
 
-      [...metadata.OneToManyRelationships, ...metadata.ManyToOneRelationships, ...metadata.ManyToManyRelationships]
+      [...metadata.OneToManyRelationships, ...metadata.ManyToManyRelationships, ...metadata.ManyToOneRelationships]
         .forEach(rel => {
           const involvesSelected = entitySet.has(rel.ReferencingEntity) && entitySet.has(rel.ReferencedEntity);
-          if (involvesSelected && !rels.some(r => r.SchemaName === rel.SchemaName)) {
-            rels.push(rel);
+          if (!involvesSelected) return;
+          const existing = bySchema.get(rel.SchemaName);
+          if (!existing || rank(rel.RelationshipType) < rank(existing.RelationshipType)) {
+            bySchema.set(rel.SchemaName, rel);
           }
         });
     });
 
-    return rels.filter(rel => {
+    return Array.from(bySchema.values()).filter(rel => {
       if (relationshipTypeFilter === 'all') return true;
       return rel.RelationshipType === relationshipTypeFilter;
     });
   }, [selectedEntityLogicalNames, entityMetadataMap, relationshipTypeFilter]);
 
-  // Auto-include relationships
+  // Auto-include relationships — adds newly available rels but never re-adds
+  // ones the user has explicitly toggled off (tracked in userDeselectedRelsRef).
   useEffect(() => {
-    if (autoIncludeRelationships && selectedEntityLogicalNames.length >= 2) {
-      setSelections(prev => {
-        const newSelectedRelationships = new Set(prev.selectedRelationships);
-        availableRelationships.forEach(rel => {
-          newSelectedRelationships.add(rel.SchemaName);
-        });
-        return {
-          ...prev,
-          selectedRelationships: Array.from(newSelectedRelationships)
-        };
+    if (!autoIncludeRelationships || selectedEntityLogicalNames.length < 2) return;
+    setSelections(prev => {
+      const next = new Set(prev.selectedRelationships);
+      let changed = false;
+      availableRelationships.forEach(rel => {
+        if (userDeselectedRelsRef.current.has(rel.SchemaName)) return;
+        if (!next.has(rel.SchemaName)) {
+          next.add(rel.SchemaName);
+          changed = true;
+        }
       });
-    }
+      if (!changed) return prev;
+      return { ...prev, selectedRelationships: Array.from(next) };
+    });
   }, [autoIncludeRelationships, selectedEntityLogicalNames, availableRelationships]);
 
-  // Toggle relationship selection
+  // When the user re-enables auto-include, forget their previous deselections.
+  useEffect(() => {
+    if (autoIncludeRelationships) {
+      userDeselectedRelsRef.current = new Set();
+    }
+  }, [autoIncludeRelationships]);
+
+  // Toggle relationship selection. Tracks user intent so auto-include doesn't
+  // override an explicit uncheck.
   const handleToggleRelationship = useCallback((schemaName: string) => {
     setSelections(prev => {
-      const newSelected = prev.selectedRelationships.includes(schemaName)
+      const isSelected = prev.selectedRelationships.includes(schemaName);
+      if (isSelected) {
+        userDeselectedRelsRef.current.add(schemaName);
+      } else {
+        userDeselectedRelsRef.current.delete(schemaName);
+      }
+      const newSelected = isSelected
         ? prev.selectedRelationships.filter(r => r !== schemaName)
         : [...prev.selectedRelationships, schemaName];
       return { ...prev, selectedRelationships: newSelected };
@@ -335,25 +364,42 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       verbosity,
       includeRules: true,
       orgUrl: orgUrl || undefined,
-      apiVersion: 'v9.2' // Match CrmApi default
+      apiVersion: 'v9.2', // Match CrmApi default
+      generatedAt
     });
-  }, [entityMetadataMap, selections, verbosity, orgUrl]);
+  }, [entityMetadataMap, selections, verbosity, orgUrl, generatedAt]);
+
+  // Surface entities the user added that haven't loaded yet so Copy/Save isn't silent.
+  const pendingEntityCount = useMemo(() => {
+    return selectedEntityLogicalNames.filter(name => !entityMetadataMap.has(name)).length;
+  }, [selectedEntityLogicalNames, entityMetadataMap]);
 
   // Estimate token count (rough: 1 token ≈ 4 characters)
   const estimatedTokens = useMemo(() => {
     return Math.ceil(markdown.length / 4);
   }, [markdown]);
 
-  // Copy to clipboard
+  // Copy to clipboard. Refresh the timestamp so the copied prompt reflects "now".
   const handleCopy = useCallback(async () => {
+    const stamp = new Date().toISOString();
+    setGeneratedAt(stamp);
+    const fresh = selections.entities.size === 0
+      ? markdown
+      : generatePromptMarkdown(entityMetadataMap, selections, {
+          verbosity,
+          includeRules: true,
+          orgUrl: orgUrl || undefined,
+          apiVersion: 'v9.2',
+          generatedAt: stamp
+        });
     try {
-      await navigator.clipboard.writeText(markdown);
+      await navigator.clipboard.writeText(fresh);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy', error);
     }
-  }, [markdown]);
+  }, [markdown, entityMetadataMap, selections, verbosity, orgUrl]);
 
   // Save prompt to file
   const handleSave = useCallback(() => {
@@ -362,10 +408,12 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       return;
     }
 
+    const stamp = new Date().toISOString();
+    setGeneratedAt(stamp);
     const promptData = {
       id: `prompt_${Date.now()}`,
       name: promptName.trim(),
-      savedAt: new Date().toISOString(),
+      savedAt: stamp,
       orgUrl,
       selections: {
         entities: Array.from(selections.entities.entries()).map(([key, value]) => [key, {
@@ -444,9 +492,10 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
         }
 
         // Restore selections
+        const restoredRelSelections = (prompt.selections?.selectedRelationships || []) as string[];
         setSelections({
           entities: restoredEntities,
-          selectedRelationships: (prompt.selections?.selectedRelationships || []) as string[]
+          selectedRelationships: restoredRelSelections
         });
 
         // Restore verbosity
@@ -459,6 +508,12 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
         if (prompt.relationshipTypeFilter) {
           setRelationshipTypeFilter(prompt.relationshipTypeFilter);
         }
+
+        // Reset deselection memory so auto-include matches the loaded selection.
+        userDeselectedRelsRef.current = new Set();
+
+        // Refresh the generated timestamp for the loaded prompt
+        setGeneratedAt(new Date().toISOString());
 
         // Clear loading/error states
         const loadingMap = new Map<string, boolean>();
@@ -487,88 +542,6 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
     reader.readAsText(file);
   }, []);
 
-  // Load prompt (kept for backward compatibility with old storage-based prompts)
-  const handleLoad = useCallback((promptId: string) => {
-    chrome.storage.sync.get(['savedPrompts'], (result) => {
-      const prompts = (result.savedPrompts || []) as Array<any>;
-      const prompt = prompts.find((p: any) => p.id === promptId);
-      
-      if (!prompt) {
-        alert('Prompt not found!');
-        return;
-      }
-
-      try {
-        // First, restore entity metadata (needed before restoring selections)
-        if (prompt.entityMetadataMap && Array.isArray(prompt.entityMetadataMap)) {
-          const restoredMetadata = new Map<string, EntityMetadataComplete>();
-          prompt.entityMetadataMap.forEach(([key, value]: [string, EntityMetadataComplete]) => {
-            restoredMetadata.set(key, value);
-          });
-          setEntityMetadataMap(restoredMetadata);
-        }
-
-        // Restore selections
-        const restoredEntities = new Map<string, EntitySelection>();
-        if (prompt.selections && prompt.selections.entities) {
-          const entitiesArray = Array.isArray(prompt.selections.entities)
-            ? prompt.selections.entities
-            : [];
-
-          entitiesArray.forEach(([key, value]: [string, any]) => {
-            restoredEntities.set(key, {
-              entityLogicalName: value.entityLogicalName as string,
-              selectedFields: (value.selectedFields || []) as string[],
-              selectedRelationships: (value.selectedRelationships || []) as string[]
-            });
-          });
-        }
-
-        // Restore selected entities (this makes them visible in the UI)
-        const entityKeys = Array.from(restoredEntities.keys());
-        setSelectedEntityLogicalNames(entityKeys);
-        
-        // Set active tab
-        if (entityKeys.length > 0) {
-          setActiveEntityTab(entityKeys[0]);
-        }
-
-        // Restore selections (after entities are set)
-        setSelections({
-          entities: restoredEntities,
-          selectedRelationships: (prompt.selections?.selectedRelationships || []) as string[]
-        });
-
-        // Restore verbosity
-        setVerbosity((prompt.verbosity || 'standard') as VerbosityLevel);
-
-        // Restore other settings
-        if (prompt.autoIncludeRelationships !== undefined) {
-          setAutoIncludeRelationships(prompt.autoIncludeRelationships);
-        }
-        if (prompt.relationshipTypeFilter) {
-          setRelationshipTypeFilter(prompt.relationshipTypeFilter);
-        }
-
-        // Clear any loading/error states for restored entities
-        const loadingMap = new Map<string, boolean>();
-        const errorMap = new Map<string, string>();
-        entityKeys.forEach(key => {
-          loadingMap.set(key, false);
-          errorMap.delete(key);
-        });
-        setLoadingMetadata(loadingMap);
-        setMetadataErrors(errorMap);
-
-        alert(`Prompt "${prompt.name || 'Untitled'}" loaded successfully! ${entityKeys.length} entities with their field selections restored.`);
-      } catch (error) {
-        console.error('[Prompt Maker] Error loading prompt:', error);
-        alert('Error loading prompt: ' + (error instanceof Error ? error.message : 'Unknown error'));
-      }
-    });
-  }, []);
-
-
   // Clear current prompt
   const handleClearPrompt = useCallback(() => {
     if (confirm('Are you sure you want to clear all selections? This cannot be undone.')) {
@@ -583,6 +556,8 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       setVerbosity('standard');
       setAutoIncludeRelationships(true);
       setRelationshipTypeFilter('all');
+      userDeselectedRelsRef.current = new Set();
+      setGeneratedAt(new Date().toISOString());
     }
   }, []);
 
@@ -780,10 +755,24 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
 
                 <div className="pm-relationship-list">
                   {availableRelationships.map(rel => {
-                    const sourceEntity = allEntities.find(e => e.LogicalName === rel.ReferencingEntity);
-                    const targetEntity = allEntities.find(e => e.LogicalName === rel.ReferencedEntity);
+                    // ReferencingEntity = child (FK holder); ReferencedEntity = parent.
+                    const childEntity = allEntities.find(e => e.LogicalName === rel.ReferencingEntity);
+                    const parentEntity = allEntities.find(e => e.LogicalName === rel.ReferencedEntity);
+                    const childName = childEntity?.DisplayName || rel.ReferencingEntity;
+                    const parentName = parentEntity?.DisplayName || rel.ReferencedEntity;
                     const isSelected = selections.selectedRelationships.includes(rel.SchemaName);
                     const isSelfReferencing = rel.ReferencingEntity === rel.ReferencedEntity;
+
+                    let pathLabel: string;
+                    if (isSelfReferencing) {
+                      pathLabel = `${parentName} (self-referencing)`;
+                    } else if (rel.RelationshipType === 'OneToMany') {
+                      pathLabel = `${parentName} → ${childName}`;
+                    } else if (rel.RelationshipType === 'ManyToOne') {
+                      pathLabel = `${childName} → ${parentName}`;
+                    } else {
+                      pathLabel = `${parentName} ↔ ${childName}`;
+                    }
 
                     return (
                       <label key={rel.SchemaName} className="pm-relationship-item">
@@ -795,15 +784,7 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
                         <div className="pm-relationship-info">
                           <span className="pm-relationship-name">{rel.SchemaName}</span>
                           <span className="pm-relationship-type">{rel.RelationshipType}</span>
-                          {isSelfReferencing ? (
-                            <span className="pm-relationship-path">
-                              {sourceEntity?.DisplayName || rel.ReferencingEntity} (self-referencing)
-                            </span>
-                          ) : (
-                            <span className="pm-relationship-path">
-                              {sourceEntity?.DisplayName || rel.ReferencingEntity} → {targetEntity?.DisplayName || rel.ReferencedEntity}
-                            </span>
-                          )}
+                          <span className="pm-relationship-path">{pathLabel}</span>
                         </div>
                       </label>
                     );
@@ -874,6 +855,9 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
                 Estimated tokens: ~{estimatedTokens.toLocaleString()}
                 {estimatedTokens > 100000 && (
                   <span className="pm-warning"> (Large prompt - may exceed AI context limits)</span>
+                )}
+                {pendingEntityCount > 0 && (
+                  <span className="pm-warning"> ({pendingEntityCount} entit{pendingEntityCount === 1 ? 'y' : 'ies'} still loading)</span>
                 )}
               </div>
             </div>

@@ -263,7 +263,7 @@ export class CrmApi {
     // Fetch all attributes with comprehensive metadata
     // Note: MaxLength, Precision, Scale may not be available on all attribute types
     // We'll fetch them separately for specific attribute types that support them
-    const attributesUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes?$select=LogicalName,DisplayName,AttributeType,IsPrimaryId,IsPrimaryName,RequiredLevel,Description`;
+    const attributesUrl = `${this.baseUrl}/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes?$select=LogicalName,DisplayName,AttributeType,IsPrimaryId,IsPrimaryName,RequiredLevel,Description,AttributeOf,IsValidForCreate,IsValidForUpdate,IsValidForRead`;
     const attributesData = await this.fetchJson(attributesUrl);
 
     // Process attributes and fetch additional details for option sets and lookups
@@ -278,7 +278,11 @@ export class CrmApi {
           RequiredLevel: attr.RequiredLevel?.Value,
           Description: attr.Description?.UserLocalizedLabel?.Label,
           IsCalculated: attr.IsCalculated,
-          IsRollup: attr.IsRollup
+          IsRollup: attr.IsRollup,
+          AttributeOf: attr.AttributeOf || undefined,
+          IsValidForCreate: attr.IsValidForCreate,
+          IsValidForUpdate: attr.IsValidForUpdate,
+          IsValidForRead: attr.IsValidForRead
         };
 
         // Fetch MaxLength, Precision, Scale for specific attribute types that support them
@@ -334,10 +338,7 @@ export class CrmApi {
           }
         }
 
-        // Check if activity party (from/to fields)
-        if (attr.LogicalName.toLowerCase().includes('party') || 
-            attr.LogicalName.toLowerCase().includes('from') || 
-            attr.LogicalName.toLowerCase().includes('to')) {
+        if (attr.AttributeType === 'PartyList') {
           attribute.IsActivityParty = true;
         }
 

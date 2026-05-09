@@ -1460,8 +1460,9 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
           const entitySchemaName = entityMetadataResult.SchemaName;
 
 
-          // Step 2: Fetch attributes separately
-          const attributesUrl = `${clientUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes?$select=LogicalName,SchemaName,AttributeType`;
+          // Step 2: Fetch attributes separately. AttributeOf identifies shadow attributes
+          // (e.g. lookup-name virtuals like `rg_username` extending the lookup `rg_user`).
+          const attributesUrl = `${clientUrl}/api/data/v9.2/EntityDefinitions(LogicalName='${entityLogicalName}')/Attributes?$select=LogicalName,SchemaName,AttributeType,AttributeOf`;
 
           const attributesResponse = await fetch(attributesUrl, {
             method: 'GET',
@@ -1496,23 +1497,32 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
             credentials: 'include'
           });
 
-          let relationshipsMap = new Map<string, any>();
+          // Polymorphic lookups (Customer/Regarding) yield multiple ManyToOne
+          // relationships sharing the same ReferencingAttribute, one per target,
+          // so collect into arrays rather than overwriting.
+          const relationshipsMap = new Map<string, Array<{
+            schemaName: string;
+            referencedEntity: string;
+            referencingEntity: string;
+          }>>();
           if (relationshipsResponse.ok) {
             const relationshipsData = await relationshipsResponse.json();
             const relationships = relationshipsData.value || [];
 
-
-            // Map relationships by ReferencingAttribute (which is the lookup field logical name)
             relationships.forEach((rel: any) => {
-              if (rel.ReferencingAttribute) {
-                relationshipsMap.set(rel.ReferencingAttribute, {
-                  schemaName: rel.SchemaName,
-                  referencedEntity: rel.ReferencedEntity,
-                  referencingEntity: rel.ReferencingEntity
-                });
+              if (!rel.ReferencingAttribute) return;
+              const entry = {
+                schemaName: rel.SchemaName,
+                referencedEntity: rel.ReferencedEntity,
+                referencingEntity: rel.ReferencingEntity
+              };
+              const existing = relationshipsMap.get(rel.ReferencingAttribute);
+              if (existing) {
+                existing.push(entry);
+              } else {
+                relationshipsMap.set(rel.ReferencingAttribute, [entry]);
               }
             });
-          } else {
           }
 
           // Create a map of attributes from the form to get option set values and targets
@@ -1569,6 +1579,51 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
           } catch (e) {
           }
 
+          // Step 4: Fetch entity-set names for every entity referenced by a lookup
+          // so the @odata.bind path uses the correct collection name.
+          const targetLogicalNames = new Set<string>();
+          relationshipsMap.forEach(rels => rels.forEach(r => targetLogicalNames.add(r.referencedEntity)));
+          lookupTargets.forEach(targets => targets.forEach(t => targetLogicalNames.add(t)));
+
+          const targetEntitySetMap = new Map<string, string>();
+          if (targetLogicalNames.size > 0) {
+            const inClause = Array.from(targetLogicalNames)
+              .map(n => `'${n.replace(/'/g, "''")}'`)
+              .join(',');
+            const targetSetUrl = `${clientUrl}/api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName&$filter=Microsoft.Dynamics.CRM.In(PropertyName='LogicalName',PropertyValues=[${inClause}])`;
+            try {
+              const tsResp = await fetch(targetSetUrl, {
+                method: 'GET',
+                headers: {
+                  'Accept': 'application/json',
+                  'OData-MaxVersion': '4.0',
+                  'OData-Version': '4.0'
+                },
+                credentials: 'include'
+              });
+              if (tsResp.ok) {
+                const tsData = await tsResp.json();
+                (tsData.value || []).forEach((e: any) => {
+                  if (e.LogicalName && e.EntitySetName) {
+                    targetEntitySetMap.set(e.LogicalName, e.EntitySetName);
+                  }
+                });
+              }
+            } catch {
+              // Best-effort; bind example will fall back to logical name.
+            }
+          }
+
+          const buildBindExample = (logicalName: string, targets: string[]): string => {
+            if (targets.length === 0) {
+              return `"${logicalName}@odata.bind": "/<entityset>(<guid>)"`;
+            }
+            const targetPath = targets
+              .map(t => `/${targetEntitySetMap.get(t) || t}(<guid>)`)
+              .join(' | ');
+            return `"${logicalName}@odata.bind": "${targetPath}"`;
+          };
+
           // Process attributes to extract OData-relevant information
           const odataFields: any[] = [];
 
@@ -1579,21 +1634,25 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
               attributeType: attr.AttributeType
             };
 
-            // Add OData bind for lookups
-            if (attr.AttributeType === 'Lookup' || attr.AttributeType === 'Customer' || attr.AttributeType === 'Owner') {
-              field.odataBind = '@odata.bind';
+            if (attr.AttributeOf) {
+              field.attributeOf = attr.AttributeOf;
+            }
 
-              // Get relationship information for this lookup
-              const relationship = relationshipsMap.get(attr.LogicalName);
-              if (relationship) {
-                field.relationshipName = relationship.schemaName;
-                field.targetEntity = relationship.referencedEntity;
-              } else {
-                // Fallback: try to get target from our lookup targets map
-                const targets = lookupTargets.get(attr.LogicalName);
-                if (targets && targets.length > 0) {
-                  field.targetEntity = targets.join(', ');
-                }
+            // Build OData bind info for lookups
+            if (attr.AttributeType === 'Lookup' || attr.AttributeType === 'Customer' || attr.AttributeType === 'Owner') {
+              const rels = relationshipsMap.get(attr.LogicalName) || [];
+              const targetsFromRels = rels.map(r => r.referencedEntity);
+              const targetsFromMeta = lookupTargets.get(attr.LogicalName) || [];
+              // Prefer relationship targets but fall back / merge with the lookup-metadata targets
+              const allTargets = Array.from(new Set([...targetsFromRels, ...targetsFromMeta]));
+
+              field.odataBind = buildBindExample(attr.LogicalName, allTargets);
+
+              if (rels.length > 0) {
+                field.relationshipName = rels.map(r => r.schemaName).join(', ');
+              }
+              if (allTargets.length > 0) {
+                field.targetEntity = allTargets.join(', ');
               }
             }
 
@@ -1601,7 +1660,7 @@ window.addEventListener('D365_HELPER_REQUEST', async (event: any) => {
             const formAttr = formAttributesMap.get(attr.LogicalName);
             if (formAttr && formAttr.options && formAttr.options.length > 0) {
               field.optionSetValues = formAttr.options
-                .map((opt: any) => `${opt.value}-${opt.label}`)
+                .map((opt: any) => `${opt.value}: ${opt.label}`)
                 .join(', ');
             }
 

@@ -33,6 +33,12 @@ export interface AttributeMetadataComplete extends AttributeMetadata {
   IsRollup?: boolean;
   IsPolymorphic?: boolean;
   IsActivityParty?: boolean;
+  /** Logical name of the parent attribute when this is a shadow attribute
+   *  (e.g. lookup-name virtuals like `rg_username` extending `rg_user`). */
+  AttributeOf?: string;
+  IsValidForCreate?: boolean;
+  IsValidForUpdate?: boolean;
+  IsValidForRead?: boolean;
 }
 
 export interface RelationshipMetadata {
