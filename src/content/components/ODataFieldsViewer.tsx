@@ -30,7 +30,7 @@ interface ODataFieldsViewerProps {
 const ODataFieldsViewer: React.FC<ODataFieldsViewerProps> = ({ data, onClose, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedKey, setCopiedKey] = useState<string>('');
-  const [hideShadowAttrs, setHideShadowAttrs] = useState(false);
+  const [hideShadowAttrs, setHideShadowAttrs] = useState(true);
 
   if (!data) {
     return null;
