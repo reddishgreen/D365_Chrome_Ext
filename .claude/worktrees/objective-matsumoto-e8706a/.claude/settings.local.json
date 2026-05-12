@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:/dev/ReddishGreen/D365_Chrome_Ext\" add manifest.json package.json src/content/components/ODataFieldsViewer.tsx d365-helper-extension.zip)",
+      "Bash(git -C C:/dev/ReddishGreen/D365_Chrome_Ext commit -m ' *)",
+      "Bash(git -C \"C:/dev/ReddishGreen/D365_Chrome_Ext\" log --oneline -3)"
+    ]
+  }
+}

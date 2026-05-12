@@ -23,7 +23,7 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
     entities: new Map(),
     selectedRelationships: []
   });
-  const [verbosity, setVerbosity] = useState<VerbosityLevel>('standard');
+  const [verbosity, setVerbosity] = useState<VerbosityLevel>('full');
   const [copied, setCopied] = useState(false);
   const [activeEntityTab, setActiveEntityTab] = useState<string | null>(null);
   const [fieldSearchTerms, setFieldSearchTerms] = useState<Map<string, string>>(new Map());
@@ -38,6 +38,9 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
   // Tracks relationships the user has explicitly toggled off so auto-include
   // doesn't re-add them on subsequent state changes.
   const userDeselectedRelsRef = useRef<Set<string>>(new Set());
+  // Guards the one-shot default-to-current-entity behavior so it doesn't
+  // re-fire after the user removes the entity or loads a prompt.
+  const defaultedToCurrentEntityRef = useRef(false);
 
   // Note: Prompts are now saved/loaded as JSON files to avoid Chrome storage quota limits
 
@@ -202,6 +205,31 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       });
     }
   }, [selectedEntityLogicalNames, entityMetadataMap, api]);
+
+  // Default the first entity to the form's current entity (if any). Runs once
+  // after entities load. Skipped if the user already added an entity (e.g.
+  // loaded a prompt from file) so we never clobber explicit intent.
+  useEffect(() => {
+    if (defaultedToCurrentEntityRef.current) return;
+    if (allEntities.length === 0) return;
+    if (selectedEntityLogicalNames.length > 0) {
+      defaultedToCurrentEntityRef.current = true;
+      return;
+    }
+    defaultedToCurrentEntityRef.current = true;
+    (async () => {
+      try {
+        const currentEntity = await helper.getEntityName();
+        if (!currentEntity) return;
+        const match = allEntities.find(e => e.LogicalName === currentEntity);
+        if (match) {
+          handleAddEntity(match);
+        }
+      } catch {
+        // Not on a form, or form not ready — leave the picker empty.
+      }
+    })();
+  }, [allEntities, helper, handleAddEntity, selectedEntityLogicalNames]);
 
   // Remove entity handler
   const handleRemoveEntity = useCallback((entityLogicalName: string) => {
@@ -499,7 +527,7 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
         });
 
         // Restore verbosity
-        setVerbosity((prompt.verbosity || 'standard') as VerbosityLevel);
+        setVerbosity((prompt.verbosity || 'full') as VerbosityLevel);
 
         // Restore other settings
         if (prompt.autoIncludeRelationships !== undefined) {
@@ -553,7 +581,7 @@ const PromptMakerViewer: React.FC<PromptMakerViewerProps> = ({ onClose }) => {
       setEntityMetadataMap(new Map());
       setActiveEntityTab(null);
       setFieldSearchTerms(new Map());
-      setVerbosity('standard');
+      setVerbosity('full');
       setAutoIncludeRelationships(true);
       setRelationshipTypeFilter('all');
       userDeselectedRelsRef.current = new Set();

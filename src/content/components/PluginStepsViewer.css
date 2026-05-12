@@ -119,6 +119,28 @@
   color: #5c6c7c;
 }
 
+.ps-clear-filters {
+  background: transparent;
+  border: 1px solid #c8ccd1;
+  color: #5c6c7c;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.ps-clear-filters:hover {
+  background: #f0f2f5;
+  color: #1a2433;
+  border-color: #a8b0b8;
+}
+
+.ps-clear-inline {
+  padding: 2px 8px;
+  margin-left: 4px;
+}
+
 .ps-error {
   padding: 18px 24px;
   background: #fde7e9;
